@@ -89,9 +89,11 @@ export class UIManager {
             [S.WALK]:      ['GROUND WALK', 'var(--primary)', 'rgba(0,240,255,0.12)'],
         };
 
-        const [label, col, bg] = state.input.brake
-            ? ['AIR BRAKES', '#888', 'rgba(100,100,100,0.15)']
-            : (modes[state.currentState] || modes[S.IDLE]);
+        const [label, col, bg] = state.freeLook
+            ? ['FREE LOOK', 'var(--primary)', 'rgba(0,240,255,0.2)']
+            : (state.input.brake
+                ? ['AIR BRAKES', '#888', 'rgba(100,100,100,0.15)']
+                : (modes[state.currentState] || modes[S.IDLE]));
 
         this._modeText.textContent        = label;
         this._modeText.style.color        = col;

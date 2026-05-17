@@ -133,9 +133,11 @@ export class Physics {
             s.currentPitch = s.mouse.y;
 
             this.rig.player.rotation.order = 'YXZ';
-            const diffYaw = wrapAngle(s.currentYaw - this.rig.player.rotation.y);
-            this.rig.player.rotation.y += diffYaw * expDecay(15, dt);
-            this.rig.player.rotation.x += (s.currentPitch - this.rig.player.rotation.x) * expDecay(15, dt);
+            if (!s.freeLook) {
+                const diffYaw = wrapAngle(s.currentYaw - this.rig.player.rotation.y);
+                this.rig.player.rotation.y += diffYaw * expDecay(15, dt);
+                this.rig.player.rotation.x += (s.currentPitch - this.rig.player.rotation.x) * expDecay(15, dt);
+            }
             s.mouse.dx = (s.mouse.dx || 0) + (0 - (s.mouse.dx || 0)) * expDecay(10, dt);
 
             s.fwdDir.set(0,0,-1).applyQuaternion(this.rig.player.quaternion);

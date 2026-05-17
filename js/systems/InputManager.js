@@ -67,6 +67,10 @@ export class InputManager {
                 case 'ShiftLeft':this.state.input.up      = -1;    break;
                 case 'KeyC':     this.state.input.brake   = true;  break;
                 case 'KeyT':     this.state.showWings     = !this.state.showWings; break;
+                case 'AltLeft':  case 'AltRight':
+                    this.state.freeLook = true;
+                    e.preventDefault();
+                    break;
             }
         });
 
@@ -76,6 +80,10 @@ export class InputManager {
                 case 'KeyA': case 'KeyD':     this.state.input.right   = 0;     break;
                 case 'Space': case 'ShiftLeft':this.state.input.up     = 0;     break;
                 case 'KeyC':                  this.state.input.brake   = false; break;
+                case 'AltLeft':  case 'AltRight':
+                    this.state.freeLook = false;
+                    e.preventDefault();
+                    break;
             }
         });
     }

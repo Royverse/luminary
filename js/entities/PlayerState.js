@@ -124,5 +124,6 @@ export class PlayerState {
         // ── Wing shader uniforms (set by CharacterRig, read by Animation) ──
         this.wingUniforms    = null;
         this.showWings       = true;
+        this.freeLook        = false;
     }
 }

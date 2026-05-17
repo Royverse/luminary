@@ -294,3 +294,30 @@ canvas {
     box-shadow: 0 0 10px rgba(255, 0, 85, 0.25);
 }
 
+/* ── GITHUB LINK ────────────────────────────────────────── */
+.github-link {
+    position: absolute;
+    bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #444a5e;
+    text-decoration: none;
+    font-size: 0.62rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    transition: color 0.2s;
+    font-family: inherit;
+}
+
+.github-link:hover {
+    color: var(--primary);
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}
+
+.github-icon {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
