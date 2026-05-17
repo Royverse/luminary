@@ -258,3 +258,31 @@ canvas {
     #instructions    { display: none !important; }
     #mobile-controls { display: block; }
 }
+
+/* ── UI BUTTONS ──────────────────────────────────────────── */
+.ui-toggle-btn {
+    pointer-events: auto;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(0, 240, 255, 0.25);
+    border-radius: 4px;
+    color: var(--primary);
+    font-size: 0.58rem;
+    font-weight: bold;
+    padding: 4px 12px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    transition: background 0.2s, box-shadow 0.2s, color 0.2s, border-color 0.2s;
+    text-transform: uppercase;
+}
+
+.ui-toggle-btn:hover {
+    background: rgba(0, 240, 255, 0.15);
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.25);
+}
+
+.ui-toggle-btn.off {
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #667;
+    background: rgba(255, 255, 255, 0.02);
+}
+

@@ -117,6 +117,8 @@ export class Animation {
 
     update(dt, time) {
         updateCharacterPose(dt, time, this.state, this.rig);
+        this.rig.wingL.visible = this.state.showWings;
+        this.rig.wingR.visible = this.state.showWings;
         this._updateTrail();
         this._updateShockwaves(dt);
         this._updateDust(dt);

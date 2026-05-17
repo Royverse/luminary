@@ -48,6 +48,27 @@ export class UIManager {
      * @param {import('../entities/PlayerState.js').PlayerState} state
      */
     update(dt, state) {
+        // ── Toggle wings button binding and state sync ──────────────
+        if (!this._wingsBtnBound) {
+            this._toggleWingsBtn = document.getElementById('toggle-wings-btn');
+            if (this._toggleWingsBtn) {
+                this._toggleWingsBtn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Prevent canvas pointer lock on click
+                    state.showWings = !state.showWings;
+                });
+                this._wingsBtnBound = true;
+            }
+        }
+        if (this._toggleWingsBtn) {
+            if (state.showWings) {
+                this._toggleWingsBtn.textContent = 'ACTIVE';
+                this._toggleWingsBtn.classList.remove('off');
+            } else {
+                this._toggleWingsBtn.textContent = 'INACTIVE';
+                this._toggleWingsBtn.classList.add('off');
+            }
+        }
+
         const S   = state.STATES;
         const alt = Math.max(0, state.velocity.y >= 0
             ? state.displayAlt   // updated by CameraJuice

@@ -66,6 +66,7 @@ export class InputManager {
                 case 'Space':    this.state.input.up      =  1;    break;
                 case 'ShiftLeft':this.state.input.up      = -1;    break;
                 case 'KeyC':     this.state.input.brake   = true;  break;
+                case 'KeyT':     this.state.showWings     = !this.state.showWings; break;
             }
         });
 
