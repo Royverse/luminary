@@ -116,6 +116,7 @@ export class PlayerState {
 
         // ── Ground landing ───────────────────────────────────────────
         this.wasGrounded     = false;
+        this.isGrounded      = false;
 
         // ── Spatial grid (populated by CityGenerator) ────────────────
         this.bucketSize      = 300;

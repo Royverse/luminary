@@ -48,6 +48,8 @@ export class Physics {
         const vel = s.velocity;
         s.simTime += dt;
 
+        let isGroundedThisFrame = false;
+
         const isMovingH  = s.input.forward !== 0 || s.input.right !== 0;
         const isMovingV  = s.input.up !== 0;
         const isMoving   = isMovingH || isMovingV;
@@ -56,11 +58,12 @@ export class Physics {
         const spd        = vel.length();
 
         // ── State machine ──────────────────────────────────────────────
-        if      (p.y <= 0.05 && !isBoosting && !s.isJumping) s.currentState = s.STATES.WALK;
+        const isGrounded = s.isGrounded || p.y <= 0.05;
+        if      (isGrounded && !isBoosting && !s.isJumping)   s.currentState = s.STATES.WALK;
         else if (isBoosting && s.input.up === -1)             s.currentState = s.STATES.POWERDIVE;
         else if (s.isStalling)                                 s.currentState = s.STATES.STALL;
         else if (isBoosting)                                   s.currentState = s.STATES.SUPERSONIC;
-        else if (!isMoving && spd < 3 && p.y > 0.05)         s.currentState = s.STATES.IDLE;
+        else if (!isMoving && spd < 3 && !isGrounded)         s.currentState = s.STATES.IDLE;
         else                                                   s.currentState = s.STATES.FLIGHT;
 
         // ── Boost windup ───────────────────────────────────────────────
@@ -238,6 +241,7 @@ export class Physics {
             vel.y = Math.max(0, vel.y);
             s.wasGrounded = true;
             s.isJumping   = false;
+            isGroundedThisFrame = true;
         } else {
             s.wasGrounded = false;
         }
@@ -271,11 +275,13 @@ export class Physics {
                         else if (minO===ov.x2) { p.x-=ov.x2; vel.x*=-.25; vel.y*=.8; vel.z*=.8; }
                         else if (minO===ov.z1) { p.z+=ov.z1; vel.z*=-.25; vel.y*=.8; vel.x*=.8; }
                         else if (minO===ov.z2) { p.z-=ov.z2; vel.z*=-.25; vel.y*=.8; vel.x*=.8; }
-                        else                   { p.y+=ov.y;  vel.y=Math.max(0,vel.y); s.isJumping=false; }
+                        else                   { p.y+=ov.y;  vel.y=Math.max(0,vel.y); s.isJumping=false; isGroundedThisFrame = true; }
                     }
                 }
             }
         }
+
+        s.isGrounded = isGroundedThisFrame;
 
         // ── Proximity rumble ───────────────────────────────────────────
         const rumbleTgt = (minBuildDist < 90 && spdAtHit > 8)
