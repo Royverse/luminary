@@ -1,0 +1,23 @@
+{
+  "name": "project-mootsana",
+  "version": "1.0.0",
+  "description": "A browser-based 3D superhero flight game built with Three.js.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Royverse/luminary.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Royverse/luminary/issues"
+  },
+  "homepage": "https://github.com/Royverse/luminary#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}
