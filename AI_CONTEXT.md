@@ -254,3 +254,52 @@ Building collision: Spatial hash ±2 buckets (~600 world units).
 - CSS layout details — open `css/style.css`
 - The dev server — open `scratch/server.js`
 - Netlify deployment — see `netlify.toml` and `README.md`
+
+---
+
+## Automated QA & Visual Verification (Playwright)
+
+To guarantee that code modifications do not break the 3D canvas or introduce silent WebGL compilation/runtime crashes, a fully integrated **Playwright Automated QA Suite** is active in the repository.
+
+### Test Structure & Configuration
+*   **Test Script:** [`tests/game.spec.js`](file:///c:/Users/User/.gemini/antigravity/playground/warped-planck/project-mootsana/tests/game.spec.js)
+*   **Playwright Config:** [`playwright.config.js`](file:///c:/Users/User/.gemini/antigravity/playground/warped-planck/project-mootsana/playwright.config.js)
+*   **Command to Run Tests:**
+    ```bash
+    npx playwright test
+    ```
+
+### Capabilities & Assertions
+1.  **Direct DOM & Render Verification:** Checks page title, detects loader screen (`#loader`), triggers the `#start-btn` launch click, expects the loader to fade out successfully, and asserts the injection of the 3D `<canvas>` element and `#hud`.
+2.  **PointerLock Mocking:** In headless environments, pointer lock triggers exceptions or browser permission warnings. The test initializes a clean Javascript proxy overlaying `Element.prototype.requestPointerLock` to ensure silent rendering continuation.
+3.  **Real-Time Console & Exception Listening:** Watches all `pageerror` and `console` event listeners. The test will **automatically fail** if *any* Javascript warning, unhandled exception, or WebGL shader compile warning is thrown.
+4.  **Visual Artefacts:** Saves visual verification frames inside the [`artifacts/`](file:///c:/Users/User/.gemini/antigravity/playground/warped-planck/project-mootsana/artifacts) folder:
+    *   `artifacts/loading_screen.png` — loading card state
+    *   `artifacts/gameplay_verification.png` — active 3D city scene rendering check
+
+---
+
+## Standard Development & Deployment Loop
+
+All participating parties—including developers and AI assistants (e.g., Antigravity)—must follow this pipeline whenever modifying codebase features or state:
+
+```
+1. Feature Code Modification (in Physics, Animation, etc.)
+               │
+               ▼
+2. Run Playwright Tests (npx playwright test)
+               │
+        ┌──────┴──────┐
+        ▼             ▼
+     [FAIL]        [PASS] (Zero WebGL compile warnings or console errors)
+        │             │
+  Fix typos/mesh      ▼
+  warnings      3. Commit & Push Code (git add & commit & push origin main)
+                      │
+                      ▼
+                4. Live Production Deploy (netlify deploy --prod)
+```
+
+> [!NOTE]
+> Running `npx playwright test` automatically ensures the live staging site matches our modular contracts perfectly. Keep it green!
+
