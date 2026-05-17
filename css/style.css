@@ -202,61 +202,175 @@ canvas {
 /* ── MOBILE CONTROLS ─────────────────────────────────────── */
 #mobile-controls {
     display: none;
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 50%;
+    position: fixed;
+    inset: 0;
     pointer-events: none;
+    z-index: 50;
 }
 
+/* Left thumb: movement joystick */
 #joystick-zone {
     position: absolute;
-    bottom: 30px;
-    left: 30px;
-    width: 120px;
-    height: 120px;
+    bottom: 36px;
+    left: 28px;
+    width: 130px;
+    height: 130px;
     background: rgba(255, 255, 255, .04);
-    border: 1px solid rgba(255, 255, 255, .1);
+    border: 1.5px solid rgba(255, 255, 255, .1);
     border-radius: 50%;
     pointer-events: auto;
+    touch-action: none;
 }
 
 #joystick-knob {
     position: absolute;
-    top: 35px;
-    left: 35px;
+    top: 40px;
+    left: 40px;
     width: 50px;
     height: 50px;
-    background: rgba(0, 240, 255, .4);
+    background: rgba(0, 240, 255, .45);
     border-radius: 50%;
-    box-shadow: 0 0 16px rgba(0, 240, 255, .4);
+    box-shadow: 0 0 18px rgba(0, 240, 255, .5);
+    pointer-events: none;
+    transition: box-shadow .1s;
 }
 
-.action-btn {
+/* Right thumb: altitude cluster (up/down) */
+#alt-cluster {
     position: absolute;
-    bottom: 50px;
-    width: 65px;
-    height: 65px;
-    border-radius: 50%;
-    pointer-events: auto;
-    color: white;
-    font-weight: bold;
-    font-size: 10px;
+    bottom: 120px;
+    right: 28px;
     display: flex;
-    justify-content: center;
-    align-items: center;
-    user-select: none;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: auto;
 }
 
-#boost-btn { right: 30px;  background: rgba(255, 0, 85, .2); border: 1px solid var(--danger); }
-#brake-btn { right: 110px; background: rgba(150, 150, 150, .15); border: 1px solid #666; }
-.action-btn:active { opacity: .6; }
+.alt-btn {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background: rgba(0, 240, 255, .12);
+    border: 1.5px solid rgba(0, 240, 255, .35);
+    color: var(--primary);
+    font-size: 1.3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background .1s, box-shadow .1s;
+}
+.alt-btn:active {
+    background: rgba(0, 240, 255, .28);
+    box-shadow: 0 0 14px rgba(0, 240, 255, .4);
+}
+
+/* Bottom action row */
+#mobile-action-row {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    pointer-events: auto;
+}
+
+.mob-btn {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, .2);
+    background: rgba(255, 255, 255, .06);
+    color: #ccc;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background .1s, box-shadow .1s, color .15s, border-color .15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.mob-btn:active {
+    background: rgba(255, 255, 255, .15);
+}
+
+/* BOOST — biggest, danger red */
+.mob-btn.boost {
+    width: 80px;
+    height: 80px;
+    background: rgba(255, 0, 85, .18);
+    border-color: var(--danger);
+    color: var(--danger);
+    font-size: 0.6rem;
+    box-shadow: 0 0 10px rgba(255, 0, 85, .2);
+}
+.mob-btn.boost:active {
+    background: rgba(255, 0, 85, .35);
+    box-shadow: 0 0 22px rgba(255, 0, 85, .5);
+}
+
+/* GYRO button states */
+.mob-btn.gyro-off {
+    color: #445;
+    border-color: rgba(255, 255, 255, .1);
+}
+.mob-btn.gyro-on {
+    color: var(--primary);
+    border-color: rgba(0, 240, 255, .5);
+    box-shadow: 0 0 12px rgba(0, 240, 255, .3);
+    background: rgba(0, 240, 255, .12);
+}
+
+/* WINGS toggle (mirrors desktop colors) */
+.mob-btn.wing-active {
+    color: var(--primary);
+    border-color: rgba(0, 240, 255, .5);
+    background: rgba(0, 240, 255, .1);
+}
+.mob-btn.cape-active {
+    color: var(--danger);
+    border-color: rgba(255, 0, 85, .4);
+    background: rgba(255, 0, 85, .08);
+}
+
+/* Gyro indicator badge at top-center */
+#gyro-indicator {
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: .58rem;
+    letter-spacing: .2em;
+    font-weight: 700;
+    color: var(--primary);
+    background: rgba(0, 240, 255, .1);
+    border: 1px solid rgba(0, 240, 255, .25);
+    border-radius: 20px;
+    padding: 5px 16px;
+    opacity: 0;
+    transition: opacity .3s;
+    pointer-events: none;
+    text-shadow: 0 0 8px rgba(0, 240, 255, .6);
+}
+#gyro-indicator.visible { opacity: 1; }
 
 /* ── RESPONSIVE ──────────────────────────────────────────── */
-@media (max-width: 768px) {
+@media (max-width: 900px) and (pointer: coarse) {
     #instructions    { display: none !important; }
     #mobile-controls { display: block; }
+    #hud { top: 12px; left: 12px; gap: 6px; }
+    #hud .glass-panel { padding: 7px 12px; }
+    .hud-value { font-size: 1.1rem; }
 }
 
 /* ── UI BUTTONS ──────────────────────────────────────────── */

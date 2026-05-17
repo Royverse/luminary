@@ -86,15 +86,30 @@
                 <button id="toggle-wings-btn" class="ui-toggle-btn wing">WINGS</button>
             </div>
             
-            <div style="margin-top:10px;font-size:.62rem;color:#445">Click canvas for pointer lock · Move mouse to steer</div>
+            <div style="margin-top:10px;font-size:.62rem;color:#445">Click canvas for pointer lock · Move mouse to steer (desktop only)</div>
         </div>
     </div>
 
     <!-- ── Mobile controls ────────────────────────────────────── -->
     <div id="mobile-controls">
+        <!-- Left: movement joystick -->
         <div id="joystick-zone"><div id="joystick-knob"></div></div>
-        <div id="brake-btn" class="action-btn">BRAKE</div>
-        <div id="boost-btn" class="action-btn">BOOST</div>
+
+        <!-- Right: altitude cluster (top) + action row (bottom) -->
+        <div id="alt-cluster">
+            <button id="up-btn"   class="alt-btn">▲</button>
+            <button id="down-btn" class="alt-btn">▼</button>
+        </div>
+
+        <div id="mobile-action-row">
+            <button id="gyro-btn"    class="mob-btn gyro-off">GYRO</button>
+            <button id="brake-btn"   class="mob-btn">BRAKE</button>
+            <button id="boost-btn"   class="mob-btn boost">BOOST</button>
+            <button id="wings-mob-btn" class="mob-btn">WINGS</button>
+        </div>
+
+        <!-- Gyro steering indicator -->
+        <div id="gyro-indicator">GYRO STEERING</div>
     </div>
 
     <!-- ── Entry point ────────────────────────────────────────── -->

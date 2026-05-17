@@ -119,57 +119,211 @@ export class InputManager {
     // ── Mobile ────────────────────────────────────────────────────────
 
     _bindMobile() {
+        // ── Joystick (left thumb) ─────────────────────────────────────
         const joyZone = document.getElementById('joystick-zone');
         const joyKnob = document.getElementById('joystick-knob');
-        let joyDrag   = false;
-        const jC      = { x: 60, y: 60 };
+        const JOY_R   = 65;   // outer radius  (half of 130px)
+        const JOY_DZ  = 14;   // dead-zone radius
+        let   joyId   = null; // active touch identifier
 
-        joyZone.addEventListener('touchstart', () => { joyDrag = true; });
-        joyZone.addEventListener('touchmove', e => {
-            if (!joyDrag) return;
+        joyZone.addEventListener('touchstart', e => {
             e.preventDefault();
-            const rect = joyZone.getBoundingClientRect();
-            let dx = e.touches[0].clientX - rect.left - jC.x;
-            let dy = e.touches[0].clientY - rect.top  - jC.y;
-            const d = Math.sqrt(dx*dx + dy*dy), dz = 15, mx = 45;
-            if (d < dz) { dx = 0; dy = 0; } else if (d > mx) { dx = dx/d*mx; dy = dy/d*mx; }
-            joyKnob.style.transform = `translate(${dx}px,${dy}px)`;
-            this.state.input.right   =  dx / mx;
-            this.state.input.forward = -dy / mx;
+            if (joyId !== null) return;
+            const t = e.changedTouches[0];
+            joyId = t.identifier;
+            this._updateJoy(t, joyZone, joyKnob, JOY_R, JOY_DZ);
         }, { passive: false });
-        joyZone.addEventListener('touchend', () => {
-            joyDrag = false;
+
+        joyZone.addEventListener('touchmove', e => {
+            e.preventDefault();
+            const t = Array.from(e.changedTouches).find(t => t.identifier === joyId);
+            if (t) this._updateJoy(t, joyZone, joyKnob, JOY_R, JOY_DZ);
+        }, { passive: false });
+
+        const joyEnd = e => {
+            const t = Array.from(e.changedTouches).find(t => t.identifier === joyId);
+            if (!t) return;
+            joyId = null;
             joyKnob.style.transform = '';
             this.state.input.right   = 0;
             this.state.input.forward = 0;
-        });
+        };
+        joyZone.addEventListener('touchend',    joyEnd);
+        joyZone.addEventListener('touchcancel', joyEnd);
 
-        document.getElementById('boost-btn').addEventListener('touchstart', e => { e.preventDefault(); this.state.input.boost = true;  });
-        document.getElementById('boost-btn').addEventListener('touchend',   e => { e.preventDefault(); this.state.input.boost = false; });
-        document.getElementById('brake-btn').addEventListener('touchstart', e => { e.preventDefault(); this.state.input.brake = true;  });
-        document.getElementById('brake-btn').addEventListener('touchend',   e => { e.preventDefault(); this.state.input.brake = false; });
+        // ── Altitude buttons (right thumb, top cluster) ───────────────
+        const upBtn   = document.getElementById('up-btn');
+        const downBtn = document.getElementById('down-btn');
 
-        let touchStartX = 0, touchStartY = 0;
-        window.addEventListener('touchstart', e => {
-            if (e.touches[0].clientX > window.innerWidth / 2) {
-                touchStartX = e.touches[0].clientX;
-                touchStartY = e.touches[0].clientY;
+        upBtn.addEventListener('touchstart',   e => { e.preventDefault(); this.state.input.up =  1; }, { passive: false });
+        upBtn.addEventListener('touchend',     e => { e.preventDefault(); this.state.input.up =  0; }, { passive: false });
+        upBtn.addEventListener('touchcancel',  e => { e.preventDefault(); this.state.input.up =  0; }, { passive: false });
+
+        downBtn.addEventListener('touchstart',  e => { e.preventDefault(); this.state.input.up = -1; }, { passive: false });
+        downBtn.addEventListener('touchend',    e => { e.preventDefault(); this.state.input.up =  0; }, { passive: false });
+        downBtn.addEventListener('touchcancel', e => { e.preventDefault(); this.state.input.up =  0; }, { passive: false });
+
+        // ── Action buttons (bottom row) ───────────────────────────────
+        const bindAction = (id, onStart, onEnd) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('touchstart',  e => { e.preventDefault(); onStart(); }, { passive: false });
+            el.addEventListener('touchend',    e => { e.preventDefault(); onEnd();   }, { passive: false });
+            el.addEventListener('touchcancel', e => { e.preventDefault(); onEnd();   }, { passive: false });
+        };
+
+        bindAction('boost-btn',
+            () => { this.state.input.boost = true;  },
+            () => { this.state.input.boost = false; }
+        );
+        bindAction('brake-btn',
+            () => { this.state.input.brake = true;  },
+            () => { this.state.input.brake = false; }
+        );
+
+        // Wings toggle (mobile) — keeps in sync with desktop T-key toggle
+        const wingsMobBtn    = document.getElementById('wings-mob-btn');
+        const gyroIndicator  = document.getElementById('gyro-indicator');
+
+        const syncWingsMob = () => {
+            const wings = this.state.showWings;
+            wingsMobBtn.textContent = wings ? 'WINGS' : 'CAPE';
+            wingsMobBtn.className   = 'mob-btn ' + (wings ? 'wing-active' : 'cape-active');
+        };
+        syncWingsMob();
+
+        wingsMobBtn.addEventListener('touchstart', e => {
+            e.preventDefault();
+            this.state.showWings = !this.state.showWings;
+            syncWingsMob();
+        }, { passive: false });
+
+        // ── Gyroscope steering ────────────────────────────────────────
+        this._gyroEnabled = false;
+        const gyroBtn = document.getElementById('gyro-btn');
+
+        // Calibration baseline (set when gyro activates)
+        let gyroBaseGamma = null;  // side-tilt  → yaw
+        let gyroBaseBeta  = null;  // fwd-tilt   → pitch
+        const GYRO_YAW_SENS   = 0.025;  // rad per degree
+        const GYRO_PITCH_SENS = 0.018;
+        const GYRO_CLAMP      = Math.PI / 2.05;
+
+        const onDeviceOrientation = e => {
+            if (!this._gyroEnabled || this.state.isStalling) return;
+
+            // Calibrate on first reading after activation
+            if (gyroBaseGamma === null) {
+                gyroBaseGamma = e.gamma ?? 0;
+                gyroBaseBeta  = e.beta  ?? 0;
+            }
+
+            const dGamma = (e.gamma ?? 0) - gyroBaseGamma;   // left/right tilt
+            const dBeta  = (e.beta  ?? 0) - gyroBaseBeta;    // fwd/back tilt
+
+            // Yaw: tilt phone left/right  (-gamma is natural)
+            this.state.mouse.x = -(dGamma * GYRO_YAW_SENS);
+
+            // Pitch: tilt phone fwd/back
+            this.state.mouse.y = clamp(dBeta * GYRO_PITCH_SENS, -GYRO_CLAMP, GYRO_CLAMP);
+        };
+
+        const enableGyro = async () => {
+            // iOS 13+ needs permission
+            if (typeof DeviceOrientationEvent !== 'undefined' &&
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const perm = await DeviceOrientationEvent.requestPermission();
+                    if (perm !== 'granted') return false;
+                } catch { return false; }
+            }
+            window.addEventListener('deviceorientation', onDeviceOrientation, true);
+            return true;
+        };
+
+        gyroBtn.addEventListener('touchstart', async e => {
+            e.preventDefault();
+            if (!this._gyroEnabled) {
+                const ok = await enableGyro();
+                if (!ok) {
+                    gyroBtn.textContent = 'NO GYRO';
+                    return;
+                }
+                this._gyroEnabled = true;
+                gyroBaseGamma = null; // re-calibrate on first event
+                gyroBaseBeta  = null;
+                gyroBtn.className = 'mob-btn gyro-on';
+                gyroBtn.textContent = 'GYRO ✓';
+                gyroIndicator.classList.add('visible');
+            } else {
+                this._gyroEnabled = false;
+                gyroBtn.className = 'mob-btn gyro-off';
+                gyroBtn.textContent = 'GYRO';
+                gyroIndicator.classList.remove('visible');
+                // Reset steering to neutral so plane doesn't drift
+                this.state.mouse.x = 0;
+                this.state.mouse.y = 0;
             }
         }, { passive: false });
+
+        // ── Right-side swipe look (fallback when gyro is OFF) ─────────
+        // Uses a dedicated single-touch tracker to avoid collisions
+        // with the joystick, which lives on the left half of screen.
+        let lookId      = null;
+        let lookStartX  = 0;
+        let lookStartY  = 0;
+        const LOOK_SENS = 0.007;
+
+        window.addEventListener('touchstart', e => {
+            // Only track a NEW touch that starts on the RIGHT half and
+            // is not already captured by joystick zone or action buttons
+            for (const t of e.changedTouches) {
+                if (t.clientX > window.innerWidth * 0.45 && lookId === null &&
+                    !joyZone.contains(e.target) ) {
+                    lookId     = t.identifier;
+                    lookStartX = t.clientX;
+                    lookStartY = t.clientY;
+                }
+            }
+        }, { passive: true });
 
         window.addEventListener('touchmove', e => {
-            const touch = Array.from(e.touches).find(t => t.clientX > window.innerWidth / 2);
-            if (touch && !this.state.isStalling) {
-                const dx = touch.clientX - touchStartX;
-                const dy = touch.clientY - touchStartY;
-                touchStartX = touch.clientX;
-                touchStartY = touch.clientY;
-                const sens = 0.008;
-                this.state.mouse.x  = (this.state.mouse.x || 0) - dx * sens;
-                this.state.mouse.y  = (this.state.mouse.y || 0) - dy * sens;
-                this.state.mouse.y  = clamp(this.state.mouse.y, -Math.PI / 2.05, Math.PI / 2.05);
-                this.state.mouse.dx = dx;
-            }
-        }, { passive: false });
+            if (this._gyroEnabled) return; // gyro takes priority
+            const t = Array.from(e.changedTouches).find(t => t.identifier === lookId);
+            if (!t || this.state.isStalling) return;
+
+            const dx = t.clientX - lookStartX;
+            const dy = t.clientY - lookStartY;
+            lookStartX = t.clientX;
+            lookStartY = t.clientY;
+
+            this.state.mouse.x  = (this.state.mouse.x  || 0) - dx * LOOK_SENS;
+            this.state.mouse.y  = clamp(
+                (this.state.mouse.y || 0) - dy * LOOK_SENS,
+                -Math.PI / 2.05,
+                 Math.PI / 2.05
+            );
+            this.state.mouse.dx = dx;
+        }, { passive: true });
+
+        window.addEventListener('touchend',    e => { for (const t of e.changedTouches) if (t.identifier === lookId) lookId = null; });
+        window.addEventListener('touchcancel', e => { for (const t of e.changedTouches) if (t.identifier === lookId) lookId = null; });
+    }
+
+    // ── Joystick position helper ──────────────────────────────────────
+    _updateJoy(touch, zone, knob, maxR, dz) {
+        const rect = zone.getBoundingClientRect();
+        const cx = rect.left + rect.width  / 2;
+        const cy = rect.top  + rect.height / 2;
+        let   dx = touch.clientX - cx;
+        let   dy = touch.clientY - cy;
+        const d  = Math.sqrt(dx * dx + dy * dy);
+
+        if (d < dz) { dx = 0; dy = 0; }
+        else if (d > maxR) { dx = dx / d * maxR; dy = dy / d * maxR; }
+
+        knob.style.transform = `translate(${dx}px, ${dy}px)`;
+        this.state.input.right   =  dx / maxR;
+        this.state.input.forward = -dy / maxR;
     }
 }
