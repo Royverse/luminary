@@ -263,9 +263,8 @@ canvas {
 .ui-toggle-btn {
     pointer-events: auto;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(0, 240, 255, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 4px;
-    color: var(--primary);
     font-size: 0.58rem;
     font-weight: bold;
     padding: 4px 12px;
@@ -275,14 +274,23 @@ canvas {
     text-transform: uppercase;
 }
 
-.ui-toggle-btn:hover {
+.ui-toggle-btn.wing {
+    color: var(--primary);
+    border-color: rgba(0, 240, 255, 0.4);
+}
+
+.ui-toggle-btn.wing:hover {
     background: rgba(0, 240, 255, 0.15);
     box-shadow: 0 0 10px rgba(0, 240, 255, 0.25);
 }
 
-.ui-toggle-btn.off {
-    border-color: rgba(255, 255, 255, 0.15);
-    color: #667;
-    background: rgba(255, 255, 255, 0.02);
+.ui-toggle-btn.cape {
+    color: var(--danger);
+    border-color: rgba(255, 0, 85, 0.4);
+}
+
+.ui-toggle-btn.cape:hover {
+    background: rgba(255, 0, 85, 0.15);
+    box-shadow: 0 0 10px rgba(255, 0, 85, 0.25);
 }
 

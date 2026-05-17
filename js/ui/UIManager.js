@@ -61,11 +61,11 @@ export class UIManager {
         }
         if (this._toggleWingsBtn) {
             if (state.showWings) {
-                this._toggleWingsBtn.textContent = 'ACTIVE';
-                this._toggleWingsBtn.classList.remove('off');
+                this._toggleWingsBtn.textContent = 'WINGS';
+                this._toggleWingsBtn.className = 'ui-toggle-btn wing';
             } else {
-                this._toggleWingsBtn.textContent = 'INACTIVE';
-                this._toggleWingsBtn.classList.add('off');
+                this._toggleWingsBtn.textContent = 'CAPE';
+                this._toggleWingsBtn.className = 'ui-toggle-btn cape';
             }
         }
 
