@@ -15,7 +15,7 @@ No build step — static files served by `scratch/server.js` (Node.js, port 8080
 The `index.html` hosts an `importmap` so bare `three` / `three/addons/` specifiers
 resolve to the CDN at runtime. All modules are native ES6.
 
-**Controls:** WASD move · SPACE/SHIFT up/down · Mouse look · LMB boost · C air-brakes.
+**Controls:** WASD move · SPACE/SHIFT up/down · Mouse look/steer · LMB supersonic boost · C air-brakes · T wings/cape toggle · ALT hold to Free Look · ESC release pointer lock.
 
 ---
 
@@ -151,12 +151,14 @@ dt = clock.getDelta()  [capped at 0.1 s]
 | `currentYaw / currentPitch` | Mirror of mouse.x / mouse.y after wrapAngle |
 | `rollAngle / turnBank` | Camera/body roll from yaw delta |
 | `isStalling / stallProgress / stallSpinRate` | Stall dynamics |
-| `isJumping / isSprinting / wasGrounded` | Ground state |
+| `isJumping / isSprinting / wasGrounded / isGrounded` | Ground and building rooftop grounded states |
 | `boostWindup` | 0–1 exponential buildup |
 | `boostPunch` | 0–1 decay used for FOV kick + shake |
 | `hoverBobPhase / hoverTargetY / hoverBlend` | Hover oscillation |
 | `simTime` | Accumulated seconds; used by cape wind oscillation |
 | `lastBoostState` | Edge detection for sonic boom trigger |
+| `showWings` | Bool (mutually exclusive wings vs cape toggle) |
+| `freeLook` | Bool (ALT key camera free look state flag) |
 
 ### Spatial Grid (written by CityGenerator, read by Physics)
 ```js

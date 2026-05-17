@@ -8,7 +8,12 @@
     <meta name="description" content="Experience high-octane superhero flight in LUMINARY. A premium 3D flight engine with supersonic boosts, energy wings, and a stunning neon cityscape.">
 
     <!-- Favicon -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><defs><linearGradient id=%22g%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22><stop offset=%220%25%22 stop-color=%22%2300f0ff%22/><stop offset=%22100%25%22 stop-color=%22%23ff0055%22/></linearGradient></defs><path d=%22M50 15 L85 50 L50 85 L15 50 Z%22 fill=%22none%22 stroke=%22url(%23g)%22 stroke-width=%228%22/><path d=%22M50 32 L70 50 L50 68 L30 50 Z%22 fill=%22url(%23g)%22 opacity=%220.85%22/></svg>">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
 
     <!-- Styles (extracted from inline) -->
     <link rel="stylesheet" href="css/style.css">
@@ -75,18 +80,19 @@
             <div class="hud-label" style="margin-bottom:8px">CONTROLS</div>
             <div class="ctrl-row"><span class="key">W A S D</span> &nbsp;Move</div>
             <div class="ctrl-row"><span class="key">SPACE</span> Up &nbsp;·&nbsp; <span class="key">SHIFT</span> Down</div>
-            <div class="ctrl-row"><span class="key">MOUSE</span> Look</div>
+            <div class="ctrl-row"><span class="key">MOUSE</span> Look / Steer</div>
             <div class="ctrl-row"><span class="key">LMB</span> Supersonic Boost</div>
             <div class="ctrl-row"><span class="key">C</span> Air Brakes</div>
-            <div class="ctrl-row"><span class="key">T</span> Toggle Energy Wings</div>
+            <div class="ctrl-row"><span class="key">T</span> Toggle Wings / Cape</div>
             <div class="ctrl-row"><span class="key">ALT</span> Hold to Free Look</div>
+            <div class="ctrl-row"><span class="key">ESC</span> Release Mouse Cursor</div>
             
-            <div style="border-top:1px solid rgba(0, 240, 255, .15); margin-top:10px; padding-top:10px; display:flex; justify-content:space-between; align-items:center;">
-                <span class="hud-label" style="margin:0; font-size:.58rem">Energy Wings</span>
+            <div style="border-top:1px solid rgba(255, 255, 255, .08); margin-top:10px; padding-top:10px; display:flex; justify-content:space-between; align-items:center;">
+                <span class="hud-label" style="margin:0; font-size:.54rem">Energy Wings</span>
                 <button id="toggle-wings-btn" class="ui-toggle-btn wing">WINGS</button>
             </div>
             
-            <div style="margin-top:10px;font-size:.62rem;color:#445">Click canvas for pointer lock · Move mouse to steer (desktop only)</div>
+            <div style="margin-top:10px;font-size:.56rem;color:#6b8b9c;line-height:1.4">Click window to steer · Press <span class="key" style="font-size:.48rem;padding:0px 4px">ESC</span> to escape pointer lock</div>
         </div>
     </div>
 
