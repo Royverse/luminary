@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LUMINARY — Flight Engine</title>
+    <meta name="description" content="Experience high-octane superhero flight in LUMINARY. A premium 3D flight engine with supersonic boosts, energy wings, and a stunning neon cityscape.">
+
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+
+    <!-- Styles (extracted from inline) -->
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- Three.js import map -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three":         "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+
+<body>
+
+    <!-- ── Loader overlay ─────────────────────────────────────── -->
+    <div id="loader">
+        <div class="spinner"></div>
+        <h1>LUMINARY</h1>
+        <p>FLIGHT ENGINE</p>
+        <button id="start-btn">LAUNCH</button>
+    </div>
+
+    <!-- ── Screen-space overlays ──────────────────────────────── -->
+    <div id="vignette"></div>
+    <div id="boost-vignette"></div>
+    <div id="impact-flash"></div>
+    <div id="boom-flash"></div>
+
+    <!-- ── HUD ────────────────────────────────────────────────── -->
+    <div id="hud">
+        <div class="glass-panel">
+            <div class="hud-label">Altitude</div>
+            <div class="hud-value" id="ui-alt">0 m</div>
+        </div>
+        <div class="glass-panel">
+            <div class="hud-label">Airspeed</div>
+            <div class="hud-value" id="ui-speed">0 km/h</div>
+        </div>
+        <div class="glass-panel">
+            <div class="hud-label">Energy Rings</div>
+            <div class="hud-value" id="ui-score" style="color:var(--gold)">0 / 150</div>
+        </div>
+        <div class="glass-panel">
+            <div class="hud-label">High Score</div>
+            <div class="hud-value" id="ui-highscore" style="color:var(--gold)">0</div>
+        </div>
+    </div>
+
+    <!-- ── Mode badge ─────────────────────────────────────────── -->
+    <div id="mode-badge">
+        <div id="mode-text">HOVER</div>
+    </div>
+
+    <!-- ── Controls legend ────────────────────────────────────── -->
+    <div id="instructions">
+        <div class="glass-panel">
+            <div class="hud-label" style="margin-bottom:8px">CONTROLS</div>
+            <div class="ctrl-row"><span class="key">W A S D</span> &nbsp;Move</div>
+            <div class="ctrl-row"><span class="key">SPACE</span> Up &nbsp;·&nbsp; <span class="key">SHIFT</span> Down</div>
+            <div class="ctrl-row"><span class="key">MOUSE</span> Look</div>
+            <div class="ctrl-row"><span class="key">LMB</span> Supersonic Boost</div>
+            <div class="ctrl-row"><span class="key">C</span> Air Brakes</div>
+            <div style="margin-top:10px;font-size:.62rem;color:#445">Click canvas for pointer lock · Move mouse to steer</div>
+        </div>
+    </div>
+
+    <!-- ── Mobile controls ────────────────────────────────────── -->
+    <div id="mobile-controls">
+        <div id="joystick-zone"><div id="joystick-knob"></div></div>
+        <div id="brake-btn" class="action-btn">BRAKE</div>
+        <div id="boost-btn" class="action-btn">BOOST</div>
+    </div>
+
+    <!-- ── Entry point ────────────────────────────────────────── -->
+    <script type="module" src="js/main.js"></script>
+
+</body>
+</html>

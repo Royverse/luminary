@@ -1,0 +1,260 @@
+/* =========================================================
+   LUMINARY — Flight Engine  |  css/style.css
+   ========================================================= */
+
+:root {
+    --primary: #00f0ff;
+    --danger:  #ff0055;
+    --gold:    #ffcc00;
+    --ui-bg:   rgba(6, 10, 22, 0.72);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    overflow: hidden;
+    background: #000;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    touch-action: none;
+    overscroll-behavior: none;
+}
+
+canvas {
+    display: block;
+}
+
+/* ── LOADER ─────────────────────────────────────────────── */
+#loader {
+    position: fixed;
+    inset: 0;
+    background: #03040d;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    color: white;
+    transition: opacity 0.6s ease;
+}
+
+#loader h1 {
+    font-size: clamp(1.4rem, 4vw, 2.2rem);
+    letter-spacing: .25em;
+    color: var(--primary);
+    text-shadow: 0 0 30px rgba(0, 240, 255, .6);
+    margin: 0 0 6px;
+}
+
+#loader p {
+    color: #556;
+    font-size: .8rem;
+    letter-spacing: .15em;
+    margin: 0 0 30px;
+}
+
+.spinner {
+    width: 48px;
+    height: 48px;
+    border: 2px solid rgba(0, 240, 255, .15);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin .9s linear infinite;
+    margin-bottom: 24px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+#start-btn {
+    display: none;
+    padding: 12px 40px;
+    background: transparent;
+    border: 1px solid var(--primary);
+    border-radius: 3px;
+    color: var(--primary);
+    font-size: .85rem;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background .2s, box-shadow .2s;
+}
+
+#start-btn:hover {
+    background: rgba(0, 240, 255, .1);
+    box-shadow: 0 0 20px rgba(0, 240, 255, .3);
+}
+
+/* ── HUD ─────────────────────────────────────────────────── */
+#hud {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    pointer-events: none;
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.glass-panel {
+    background: var(--ui-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 240, 255, .15);
+    border-radius: 8px;
+    padding: 10px 18px;
+    color: white;
+}
+
+.hud-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--primary);
+    text-shadow: 0 0 8px rgba(0, 240, 255, .4);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.hud-label {
+    font-size: .6rem;
+    text-transform: uppercase;
+    letter-spacing: .18em;
+    color: #557;
+}
+
+/* ── MODE BADGE ──────────────────────────────────────────── */
+#mode-badge {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+    display: none;
+}
+
+#mode-text {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .3em;
+    text-transform: uppercase;
+    padding: 6px 20px;
+    background: var(--ui-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 240, 255, .2);
+    border-radius: 20px;
+    color: var(--primary);
+    transition: color .2s, border-color .2s;
+}
+
+/* ── OVERLAYS ────────────────────────────────────────────── */
+#vignette {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, .65) 100%);
+    z-index: 10;
+}
+
+#boost-vignette {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 0, 85, .12) 100%);
+    z-index: 11;
+    opacity: 0;
+    transition: opacity .15s;
+}
+
+#impact-flash, #boom-flash {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: #fff;
+    opacity: 0;
+}
+#impact-flash { z-index: 20; }
+#boom-flash   { z-index: 15; mix-blend-mode: overlay; }
+
+/* ── INSTRUCTIONS ────────────────────────────────────────── */
+#instructions {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    pointer-events: none;
+    display: none;
+}
+
+#instructions .glass-panel { padding: 14px 20px; }
+.ctrl-row { font-size: .72rem; color: #aaa; margin: 3px 0; }
+.key {
+    display: inline-block;
+    background: rgba(255, 255, 255, .08);
+    border: 1px solid rgba(255, 255, 255, .2);
+    border-radius: 3px;
+    padding: 1px 7px;
+    color: #ddd;
+    font-family: monospace;
+    font-size: .68rem;
+}
+
+/* ── MOBILE CONTROLS ─────────────────────────────────────── */
+#mobile-controls {
+    display: none;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 50%;
+    pointer-events: none;
+}
+
+#joystick-zone {
+    position: absolute;
+    bottom: 30px;
+    left: 30px;
+    width: 120px;
+    height: 120px;
+    background: rgba(255, 255, 255, .04);
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: 50%;
+    pointer-events: auto;
+}
+
+#joystick-knob {
+    position: absolute;
+    top: 35px;
+    left: 35px;
+    width: 50px;
+    height: 50px;
+    background: rgba(0, 240, 255, .4);
+    border-radius: 50%;
+    box-shadow: 0 0 16px rgba(0, 240, 255, .4);
+}
+
+.action-btn {
+    position: absolute;
+    bottom: 50px;
+    width: 65px;
+    height: 65px;
+    border-radius: 50%;
+    pointer-events: auto;
+    color: white;
+    font-weight: bold;
+    font-size: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    user-select: none;
+}
+
+#boost-btn { right: 30px;  background: rgba(255, 0, 85, .2); border: 1px solid var(--danger); }
+#brake-btn { right: 110px; background: rgba(150, 150, 150, .15); border: 1px solid #666; }
+.action-btn:active { opacity: .6; }
+
+/* ── RESPONSIVE ──────────────────────────────────────────── */
+@media (max-width: 768px) {
+    #instructions    { display: none !important; }
+    #mobile-controls { display: block; }
+}
