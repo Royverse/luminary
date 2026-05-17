@@ -59,9 +59,10 @@
             <div class="hud-label">Airspeed</div>
             <div class="hud-value" id="ui-speed">0 km/h</div>
         </div>
-        <div class="glass-panel">
+        <div class="glass-panel" id="ui-score-panel" style="position:relative">
             <div class="hud-label">Energy Rings</div>
             <div class="hud-value" id="ui-score" style="color:var(--gold)">0 / 150</div>
+            <div id="ui-combo" style="position:absolute; right:16px; top:50%; transform:translateY(-50%); font-size:.56rem; font-weight:700; letter-spacing:.15em; color:var(--primary); text-shadow:0 0 10px rgba(0, 240, 255, 0.4); opacity:0; transition:opacity 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events:none; text-transform:uppercase">x0</div>
         </div>
         <div class="glass-panel">
             <div class="hud-label">High Score</div>

@@ -69,6 +69,10 @@ export class CameraJuice {
         const S   = s.STATES;
 
         // ── Collectibles: bob + collection ────────────────────────────
+        if (s.comboCount > 0 && (time - s.lastCollectTime) > 4.5) {
+            s.comboCount = 0;
+        }
+
         for (const ring of this.collectibles.rings) {
             if (!ring.userData.active) continue;
             ring.rotation.y += 1.6 * dt;
@@ -81,6 +85,15 @@ export class CameraJuice {
                     s.highScore = s.score;
                     localStorage.setItem('luminary_highscore', s.highScore.toString());
                 }
+
+                // Combo calculation
+                if (s.lastCollectTime > 0 && (time - s.lastCollectTime) < 4.5) {
+                    s.comboCount++;
+                } else {
+                    s.comboCount = 1;
+                }
+                s.lastCollectTime = time;
+
                 this.audio.playCollectSound();
             }
         }

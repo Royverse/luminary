@@ -103,6 +103,8 @@ export class PlayerState {
         this.score           = 0;
         this.highScore       = parseInt(localStorage.getItem('luminary_highscore') || '0');
         this.totalRings      = 150;
+        this.comboCount      = 0;
+        this.lastCollectTime = 0;
 
         // ── Double-tap tracking ──────────────────────────────────────
         this.lastTap         = { A: 0, D: 0 };

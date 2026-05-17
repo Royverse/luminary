@@ -35,9 +35,13 @@ export class UIManager {
         this._boostVig   = document.getElementById('boost-vignette');
         this._impactFlash = document.getElementById('impact-flash');
         this._boomFlash   = document.getElementById('boom-flash');
+        this._scorePanel = document.getElementById('ui-score-panel');
+        this._combo      = document.getElementById('ui-combo');
 
         this._flashTO    = null;
         this._boomFlashTO = null;
+        this._pulseTO    = null;
+        this._lastScore  = 0;
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -78,6 +82,32 @@ export class UIManager {
         this._speed.textContent     = Math.floor(state.displaySpeed)  + ' km/h';
         this._score.textContent     = `${state.score} / ${state.totalRings}`;
         this._highscore.textContent = state.highScore;
+
+        // ── Score pulse animation trigger ───────────────────────────
+        if (this._lastScore > 0 && state.score > this._lastScore) {
+            if (this._scorePanel) {
+                this._scorePanel.classList.remove('ring-pulse');
+                void this._scorePanel.offsetWidth; // Trigger DOM reflow
+                this._scorePanel.classList.add('ring-pulse');
+                clearTimeout(this._pulseTO);
+                this._pulseTO = setTimeout(() => {
+                    this._scorePanel.classList.remove('ring-pulse');
+                }, 450);
+            }
+        }
+        this._lastScore = state.score;
+
+        // ── Combo overlay indicator ──────────────────────────────────
+        if (this._combo) {
+            if (state.comboCount > 1) {
+                this._combo.textContent = `STREAK x${state.comboCount}`;
+                this._combo.style.opacity = '1';
+                this._combo.style.transform = 'translateY(-50%) scale(1.1)';
+            } else {
+                this._combo.style.opacity = '0';
+                this._combo.style.transform = 'translateY(-50%) scale(0.9)';
+            }
+        }
 
         // ── Mode badge ─────────────────────────────────────────────
         const modes = {
