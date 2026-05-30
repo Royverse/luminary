@@ -5,13 +5,16 @@
 
 ---
 
-## ✨ The Vibe & Features
+## 🌌 The Vibe & Features
 
 Luminary is designed to look and feel extremely premium, featuring:
-*   **💨 High-Velocity Flight Physics:** Dynamic drag coefficients, lift equations, air brakes, power dives, and supersonic boom shockwaves.
-*   **🏮 Neo-Cyber City Grid:** Procedural building mesh layout with 3D spatial partitioning for lightning-fast AABB collision checks.
-*   **💃 Procedural Verlet cape cloth simulation** that reacts beautifully to flight drag, velocity, and gravity.
-*   **⚡ Mutually Exclusive Flight Customization:** Switch between a sweeping crimson cape or glowing cyan-magenta energy wings on the fly!
+*   **🚀 High-Velocity Flight Physics:** Dynamic drag coefficients, lift equations, air brakes, power dives, and supersonic boom shockwaves.
+*   **🕸️ Serverless P2P WebRTC Multiplayer:** Real-time movement synchronization via Trystero and public Nostr relays (Damus/Nos.lol). Highly resilient against firewalls with 0% server costs!
+*   **🎲 Seeded Deterministic Metropolis:** Replaces standard randomness with a Mulberry32 PRNG seeded by the WebRTC `roomID`. Both clients automatically generate the *exact same skyscraper architecture and collectible rings* locally, completely eliminating large world sync payloads!
+*   **🏁 Competitive Point-to-Point Racing:** Dash across the generated city to a towering, neon-pink sky laser Finish Beacon, guided by a 100% fair relative 3D compass HUD.
+*   **💫 Peer Visual Supersonic Sync:** connected players leave gorgeous hot-pink supersonic trails behind them when boosting, making it incredibly clean to track competitors at high altitudes.
+*   **👗 Procedural Verlet cape cloth simulation** that reacts beautifully to flight drag, velocity, and gravity.
+*   **✨ Mutually Exclusive Flight Customization:** Switch between a sweeping crimson cape or glowing cyan-magenta energy wings on the fly!
 *   **🎥 Free Look Camera System:** Hold the `ALT` key to orbit the camera fully around the hero to check out your flight from the front without steering off-course.
 
 ---
@@ -49,7 +52,9 @@ Luminary is designed to look and feel extremely premium, featuring:
 │   │   ├── AnimationPose.js   # Character skeleton dynamic pose solver
 │   │   ├── AudioManager.js    # Synths & procedural audio (Wind rumble)
 │   │   ├── InputManager.js    # Mouse, keyboard & mobile touch listeners
-│   │   └── Physics.js         # Aerospace lift, drag, AABB building collision
+│   │   ├── MultiplayerManager.js # [NEW] WebRTC state sync, nickname broadcasting & peer trail rendering
+│   │   ├── Physics.js         # Aerospace lift, drag, AABB building collision
+│   │   └── RaceManager.js        # [NEW] Checkpoint laser beacon, waypoint compass HUD & winner arbitration overlays
 │   ├── ui/
 │   │   └── UIManager.js       # HTML HUD DOM reads / writes
 │   └── world/

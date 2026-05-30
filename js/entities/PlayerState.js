@@ -128,5 +128,13 @@ export class PlayerState {
         this.wingUniforms    = null;
         this.showWings       = true;
         this.freeLook        = false;
+
+        // 🌐 Multiplayer State Fields
+        this.isMultiplayer   = false;
+        this.roomID          = null;
+        this.isHost          = false;
+        this.localNickname   = localStorage.getItem('luminary_nickname') || 'HERO';
+        this.peers           = new Map(); // peerID -> { nickname, rig, arrowMesh, tagEl, lastUpdate, targetPos, targetRot, targetVel, targetState, targetWings, targetBoost }
+        this.random          = Math.random;
     }
 }

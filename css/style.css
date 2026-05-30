@@ -503,3 +503,223 @@ canvas {
     animation: ring-pulse-anim 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+
+
+/* 🌐 MULTIPLAYER LOBBY CSS ------------------------------------------------ */
+.lobby-glass-panel {
+    background: rgba(4, 7, 16, 0.7);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 24px;
+    width: 380px;
+    max-width: 90vw;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    margin-bottom: 20px;
+    z-index: 10000;
+}
+
+.lobby-row {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+}
+
+#nickname-input {
+    flex: 1;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: white;
+    font-family: 'Outfit', sans-serif;
+    font-size: .8rem;
+    font-weight: 500;
+    letter-spacing: .08em;
+    outline: none;
+    transition: all 0.3s ease;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+#nickname-input::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+#nickname-input:focus {
+    border-color: var(--primary);
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+}
+
+.lobby-btn {
+    flex: 1;
+    padding: 12px 20px;
+    background: rgba(0, 240, 255, 0.04);
+    border: 1px solid rgba(0, 240, 255, 0.3);
+    border-radius: 8px;
+    color: var(--primary);
+    font-family: 'Outfit', sans-serif;
+    font-size: .75rem;
+    font-weight: 600;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    text-align: center;
+}
+
+.lobby-btn:hover {
+    background: rgba(0, 240, 255, 0.12);
+    border-color: var(--primary);
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.25);
+    transform: translateY(-1px);
+}
+
+.lobby-btn.secondary {
+    color: var(--danger);
+    background: rgba(255, 0, 85, 0.02);
+    border-color: rgba(255, 0, 85, 0.3);
+}
+
+.lobby-btn.secondary:hover {
+    background: rgba(255, 0, 85, 0.08);
+    border-color: var(--danger);
+    box-shadow: 0 0 20px rgba(255, 0, 85, 0.2);
+}
+
+.lobby-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: #8fa0af;
+    letter-spacing: 0.05em;
+    text-align: center;
+    padding: 10px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    word-break: break-all;
+}
+
+.share-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.share-label {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.54rem;
+    color: #6b8b9c;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+}
+
+.share-url-container {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+#share-url-input {
+    flex: 1;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    color: #8fa0af;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    outline: none;
+}
+
+#copy-url-btn {
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: white;
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#copy-url-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.player-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#lobby-player-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+#lobby-player-list li {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+    border-left: 3px solid var(--primary);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#lobby-player-list li.host {
+    border-left-color: var(--danger);
+}
+
+/* Floating screen-space player labels */
+.player-tag {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    background: rgba(4, 7, 16, 0.85);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    border: 1px solid rgba(0, 240, 255, 0.25);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: white;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 100;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 10px rgba(0, 240, 255, 0.15);
+    transition: opacity 0.15s ease;
+    text-transform: uppercase;
+}
+
+.player-tag-name {
+    color: #fff;
+}
+
+.player-tag-stat {
+    color: var(--primary);
+    font-size: 0.54rem;
+    margin-left: 6px;
+}

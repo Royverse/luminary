@@ -47,12 +47,12 @@ export class Collectibles {
             const ring = new THREE.Mesh(geom, mat);
 
             ring.position.set(
-                (Math.random() - 0.5) * 3800,
-                35 + Math.pow(Math.random(), 2) * 380,
-                (Math.random() - 0.5) * 3800
+                (this.state.random() - 0.5) * 3800,
+                35 + Math.pow(this.state.random(), 2) * 380,
+                (this.state.random() - 0.5) * 3800
             );
-            ring.rotation.y = Math.random() * Math.PI;
-            ring.rotation.x = (Math.random() - 0.5) * 0.5;
+            ring.rotation.y = this.state.random() * Math.PI;
+            ring.rotation.x = (this.state.random() - 0.5) * 0.5;
 
             ring.userData = {
                 active: true,

@@ -55,9 +55,9 @@ export class CityGenerator {
         for (let wy = 6; wy < 512; wy += 26) {
             for (let wxx = 6; wxx < 512; wxx += 22) {
                 if (wxx % 100 < 14 || wy % 100 < 10) continue;
-                if (Math.random() > 0.38) {
-                    wx.fillStyle   = Math.random() > 0.12 ? '#1a66ff' : '#ffddaa';
-                    wx.globalAlpha = Math.random() * 0.75 + 0.25;
+                if (this.state.random() > 0.38) {
+                    wx.fillStyle   = this.state.random() > 0.12 ? '#1a66ff' : '#ffddaa';
+                    wx.globalAlpha = this.state.random() * 0.75 + 0.25;
                     wx.fillRect(wxx, wy, 14, 19);
                 }
             }
@@ -90,7 +90,7 @@ export class CityGenerator {
 
         for (let gx = -R; gx < R && idx < instanceCount; gx++) {
             for (let gz = -R; gz < R && idx < instanceCount; gz++) {
-                if (Math.random() < 0.1) continue;
+                if (this.state.random() < 0.1) continue;
 
                 const swX = (gx % 8 === 0) ? 60 : 26;
                 const swZ = (gz % 8 === 0) ? 60 : 26;
@@ -98,10 +98,10 @@ export class CityGenerator {
                 const pz  = gz * (base + swZ);
 
                 const nd = Math.max(0, 1 - Math.sqrt(gx * gx + gz * gz) / (R * 0.5));
-                const h  = 40 + Math.random() * 60 + Math.pow(nd, 3) * 900;
+                const h  = 40 + this.state.random() * 60 + Math.pow(nd, 3) * 900;
 
                 // Vary footprint aspect ratio
-                const st = Math.random();
+                const st = this.state.random();
                 let w, d;
                 if      (st < 0.3) { w = 46; d = 20; }
                 else if (st < 0.6) { w = 20; d = 46; }
@@ -121,8 +121,8 @@ export class CityGenerator {
                 });
 
                 // Slightly randomised dark-blue tint per building
-                const shade = 0.08 + Math.random() * 0.28;
-                col.setHSL(0.6 + (Math.random() - 0.5) * 0.1, 0.2, shade);
+                const shade = 0.08 + this.state.random() * 0.28;
+                col.setHSL(0.6 + (this.state.random() - 0.5) * 0.1, 0.2, shade);
                 this.city.setColorAt(idx, col);
 
                 idx++;

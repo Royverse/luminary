@@ -40,6 +40,7 @@ import { CharacterRig }  from './entities/CharacterRig.js';
 import { Physics }       from './systems/Physics.js';
 import { Animation }     from './systems/Animation.js';
 import { CameraJuice }   from './systems/CameraJuice.js';
+import { RaceManager }   from './systems/RaceManager.js';
 
 export class GameEngine {
     /**
@@ -108,12 +109,15 @@ export class GameEngine {
         // pointer-lock click listener to exactly the right element.
         this.input.attachRenderer(this.renderer.domElement);
 
+        this.race = new RaceManager(this.state, this.scene, this.rig, this.ui);
+        this.multiplayer = null;
         this.clock = null; // created in start() after user gesture
     }
 
     /** Called by main.js after the LAUNCH button is clicked. */
     start() {
         this.clock = new THREE.Clock();
+        this.race.startRace();
         this._loop();
     }
 
@@ -123,7 +127,13 @@ export class GameEngine {
         const dt = Math.min(this.clock.getDelta(), 0.1);
 
         this.physics.update(dt);
+        this.race.update(dt, this.camera);
         this.animation.update(dt, this.clock.getElapsedTime());
+        
+        if (this.multiplayer) {
+            this.multiplayer.update(dt);
+        }
+        
         this.cameraJuice.update(dt, this.clock.getElapsedTime());
         this.ui.update(dt, this.state);
 
