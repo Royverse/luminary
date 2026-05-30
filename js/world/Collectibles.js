@@ -5,7 +5,7 @@
  *
  * @ai-context
  *   OWNS      : ring Mesh array (this.rings[]); ring geometry + material.
- *   READS     : state.totalRings (ring count).
+ *   READS     : state.totalRings (ring count), state.random (seeded PRNG for deterministic ring positions).
  *   WRITES    : nothing to PlayerState.
  *   EXPOSES   : this.rings[] — iterated by CameraJuice each frame for
  *               bob animation and collection detection.

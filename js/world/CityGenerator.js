@@ -7,7 +7,7 @@
  * @ai-context
  *   OWNS      : InstancedMesh of 10k buildings; canvas window texture;
  *               state.spatialGrid population (AABB entries).
- *   READS     : state.bucketSize (300 units).
+ *   READS     : state.bucketSize (300 units), state.random (seeded PRNG for deterministic skyscraper placement).
  *   WRITES    : state.spatialGrid — Map<"bx,bz", AABB[]>.
  *   RELATED   : Physics.js (reads spatialGrid for collision, constant hr=2.2);
  *               PlayerState.js (spatialGrid + bucketSize fields).
