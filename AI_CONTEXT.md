@@ -122,6 +122,8 @@ dt = clock.getDelta()  [capped at 0.1 s]
 | `boostForce` | 900 | Boost thrust force |
 | `gravity` | 14.0 | Downward gravity (m/s²) |
 | `liftCoeff` | 0.75 | Aerodynamic lift multiplier |
+| `jumpForce` | 12.5 | Jump impulse (shared by Physics + AnimationPose jump tuck) |
+| `kSpeedCapSoft` | 5.0 | Overspeed exponential decay rate toward the active speed cap |
 | `kDragFwdNormal` | 1.4 | Forward drag in flight |
 | `kDragFwdBoost` | 0.5 | Forward drag while boosting |
 | `kDragFwdBrake` | 9.0 | Forward drag on air brake |
@@ -264,7 +266,8 @@ Building collision: Spatial hash ±2 buckets (~600 world units).
 To guarantee that code modifications do not break the 3D canvas or introduce silent WebGL compilation/runtime crashes, a fully integrated **Playwright Automated QA Suite** is active in the repository.
 
 ### Test Structure & Configuration
-*   **Test Script:** [`tests/game.spec.js`](file:///c:/Users/User/.gemini/antigravity/playground/warped-planck/project-mootsana/tests/game.spec.js)
+*   **Test Script:** [`tests/game.spec.js`](file:///c:/Users/User/.gemini/antigravity/playground/warped-planck/project-mootsana/tests/game.spec.js) — runs against the **live Netlify site**
+*   **Local Test Script:** [`tests/local-verify.spec.js`](file:///c:/Users/User/.gemini/antigravity/playground/warped-planck/project-mootsana/tests/local-verify.spec.js) — same checks against `http://localhost:8080` (start `node scratch/server.js` first) so **uncommitted changes** are verified pre-push; auto-skips when the server is down
 *   **Playwright Config:** [`playwright.config.js`](file:///c:/Users/User/.gemini/antigravity/playground/warped-planck/project-mootsana/playwright.config.js)
 *   **Command to Run Tests:**
     ```bash

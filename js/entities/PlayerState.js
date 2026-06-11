@@ -51,6 +51,8 @@ export class PlayerState {
         this.kDragVertWorld  = 0.8;
         this.gravity         = 14.0;
         this.liftCoeff       = 0.75;
+        this.jumpForce       = 12.5;
+        this.kSpeedCapSoft   = 5.0;
 
         // ── Boost windup ─────────────────────────────────────────────
         this.boostWindup     = 0;

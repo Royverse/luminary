@@ -42,11 +42,15 @@ export function updateCharacterPose(dt, time, state, rig) {
         rig.bodyPivot.rotation.x = ease(rig.bodyPivot.rotation.x, tgt, isWalk ? 12 : 3.5);
     }
 
-    // Eye glow
+    // Eye glow + chest emblem pulse (emblem breathes with flight intensity)
     if (rig.eyeL && rig.eyeR) {
         const ei = isSuper?6:isDive?8:isStall?0.8:(isIdle||isWalk)?2:3;
         rig.eyeL.material.emissiveIntensity = ease(rig.eyeL.material.emissiveIntensity, ei, 4);
         rig.eyeR.material.emissiveIntensity = rig.eyeL.material.emissiveIntensity;
+        if (rig.emblem) {
+            rig.emblem.material.emissiveIntensity =
+                0.8 + rig.eyeL.material.emissiveIntensity * 0.4 + Math.sin(time * 2.2) * 0.2;
+        }
     }
 
     const HIP_H=0.96, aL=rig.armL, aR=rig.armR, lL=rig.legL, lR=rig.legR;
@@ -108,8 +112,7 @@ export function updateCharacterPose(dt, time, state, rig) {
         rig.headPivot.rotation.y=ease(rig.headPivot.rotation.y,0,8);
 
     } else if (state.isJumping) {
-        const JUMP_FORCE=7.5;
-        const tuck=Math.min(1,Math.abs(state.velocity.y)/JUMP_FORCE*1.4);
+        const tuck=Math.min(1,Math.abs(state.velocity.y)/state.jumpForce*1.4);
         const legTuck=state.velocity.y>0?0.55*tuck:-0.25*tuck;
         lL.thighPivot.rotation.x=ease(lL.thighPivot.rotation.x,legTuck+0.1,16);
         lR.thighPivot.rotation.x=ease(lR.thighPivot.rotation.x,legTuck+0.1,16);
@@ -131,9 +134,22 @@ export function updateCharacterPose(dt, time, state, rig) {
         let szL=0.12,szR=-0.12,sxL=0,sxR=0,exL=-0.06,exR=-0.06;
         let hxL=0,hxR=0,kxL=0,kxR=0,fxL=0,fxR=0;
 
-        if (isIdle)         { szL=0.4;szR=-0.4;sxL=-0.2;sxR=-0.2;exL=-0.1;exR=-0.1;hxL=0.1;hxR=0.1; }
-        else if (isSuper)   { szL=0.05;szR=-0.05;sxL=-Math.PI*0.95;sxR=-Math.PI*0.95;exL=0;exR=0;hxL=0.1;hxR=0.1; }
-        else if (isDive)    { szL=0.1;szR=-0.1;sxL=0.2;sxR=0.2;exL=-1.2;exR=-1.2; }
+        if (isIdle) {
+            // Hover: relaxed limbs with slow asymmetric drift so it reads alive
+            szL=0.4;szR=-0.4;
+            sxL=-0.2+Math.sin(time*0.9)*0.05; sxR=-0.2+Math.cos(time*0.8)*0.05;
+            exL=-0.1;exR=-0.1;
+            hxL=0.1+Math.sin(time*0.7)*0.035; hxR=0.1+Math.cos(time*0.65)*0.035;
+        }
+        else if (isSuper) {
+            // Classic one-fist lead: left arm punched forward, right tucked at side
+            szL=0.05;szR=-0.22;
+            sxL=-Math.PI*0.95;sxR=0.35;
+            exL=0;exR=-0.55;
+            hxL=0.05;hxR=0.16;
+            fxL=0.45;fxR=0.45;
+        }
+        else if (isDive)    { szL=0.1;szR=-0.1;sxL=0.2;sxR=0.2;exL=-1.2;exR=-1.2;fxL=0.3;fxR=0.3; }
         else if (isStall)   {
             szL=1.3;szR=-1.3;
             sxL=-0.9-Math.sin(time*8.5)*0.4; sxR=-0.9-Math.cos(time*7.8)*0.4;
@@ -141,7 +157,14 @@ export function updateCharacterPose(dt, time, state, rig) {
             hxL=-Math.sin(time*6.2)*0.5; hxR=-Math.cos(time*5.7)*0.5;
             kxL=-0.45-Math.sin(time*7.3)*0.35; kxR=-0.45-Math.cos(time*6.8)*0.35;
         } else if (isBraking){ szL=1.3;szR=-1.3;sxL=-1.2;sxR=-1.2;exL=-0.2;exR=-0.2;hxL=0.3;hxR=0.3;kxL=-0.4;kxR=-0.4; }
-        else                 { szL=0.3;szR=-0.3;sxL=-0.4;sxR=-0.4;exL=-0.2;exR=-0.2; }
+        else {
+            // Cruise flight: arms swept back, slightly staggered, with gentle drift
+            szL=0.28;szR=-0.32;
+            sxL=-0.35+Math.sin(time*1.1)*0.04; sxR=-0.5+Math.cos(time*1.0)*0.04;
+            exL=-0.25;exR=-0.15;
+            hxL=0.04;hxR=0.1;
+            fxL=0.35;fxR=0.35;
+        }
 
         const r=isStall?10:6;
         aL.shoulderPivot.rotation.z=ease(aL.shoulderPivot.rotation.z,szL,r);
@@ -157,7 +180,17 @@ export function updateCharacterPose(dt, time, state, rig) {
         lL.footPivot.rotation.x=ease(lL.footPivot.rotation.x,fxL,r);
         lR.footPivot.rotation.x=ease(lR.footPivot.rotation.x,fxR,r);
         rig.hips.position.y=ease(rig.hips.position.y,HIP_H,r);
-        rig.hips.rotation.set(0,0,0); rig.chest.rotation.set(0,0,0); rig.neckPivot.rotation.set(0,0,0);
+        // Torso eases home instead of hard-resetting; chest leans into banked turns
+        const lean = (isIdle||isStall) ? 0 : state.turnBank*0.22;
+        rig.hips.rotation.x=ease(rig.hips.rotation.x,0,r);
+        rig.hips.rotation.y=ease(rig.hips.rotation.y,0,r);
+        rig.hips.rotation.z=ease(rig.hips.rotation.z,0,r);
+        rig.chest.rotation.x=ease(rig.chest.rotation.x,0,r);
+        rig.chest.rotation.y=ease(rig.chest.rotation.y,0,r);
+        rig.chest.rotation.z=ease(rig.chest.rotation.z,lean,5);
+        rig.neckPivot.rotation.x=ease(rig.neckPivot.rotation.x,0,r);
+        rig.neckPivot.rotation.y=ease(rig.neckPivot.rotation.y,0,r);
+        rig.neckPivot.rotation.z=ease(rig.neckPivot.rotation.z,-lean*0.6,5);
 
         let hp=0,hy=0;
         if (isWalk||isIdle||state.isJumping) {

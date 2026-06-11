@@ -8,7 +8,7 @@
  *   READS     : state.totalRings (unused directly, kept for potential future use).
  *   WRITES    : nothing to PlayerState.
  *   EXPOSES   : player, bodyPivot, hips, chest, neckPivot, headPivot,
- *               eyeL, eyeR, armL, armR, legL, legR,
+ *               eyeL, eyeR, emblem, armL, armR, legL, legR,
  *               wingL, wingR, wingUniforms,
  *               cape, particles, constraints, SEGS_W, SEGS_H,
  *               leftPin, rightPin, proxies, proxyVecs, colliders, charScale.
@@ -46,6 +46,8 @@ export class CharacterRig {
             hair:  new THREE.MeshStandardMaterial({ color: 0x251510, roughness: 0.95 }),
             eye:   new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 2 }),
             sole:  new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9  }),
+            belt:  new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.35, metalness: 0.8 }),
+            emblem:new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 1.5, roughness: 0.2, metalness: 0.5 }),
         };
         const HIP_H=0.96, THIGH_H=0.44, CALF_H=0.44, TORSO_H=0.50, NECK_H=0.10, HEAD_R=0.14;
 
@@ -54,11 +56,20 @@ export class CharacterRig {
 
         this.hips = new THREE.Group(); this.hips.position.y = HIP_H; this.bodyPivot.add(this.hips);
         this.hips.add(bone(new THREE.CylinderGeometry(0.16,0.18,0.18,16), M.pants, -0.09));
+        const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.168,0.172,0.05,16), M.belt);
+        belt.position.y = -0.005; belt.castShadow = true; this.hips.add(belt);
+        const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.055,0.045,0.02), M.belt);
+        buckle.position.set(0,-0.005,-0.165); this.hips.add(buckle);
 
         this.chest = new THREE.Group(); this.hips.add(this.chest);
         this.chest.add(bone(new THREE.CylinderGeometry(0.19,0.17,TORSO_H,16), M.shirt, TORSO_H/2));
         const hem = new THREE.Mesh(new THREE.CylinderGeometry(0.175,0.175,0.04,16), M.shirt);
         hem.castShadow = true; this.chest.add(hem);
+        const emblemGeo = new THREE.OctahedronGeometry(0.055);
+        emblemGeo.scale(1, 1.35, 0.35);
+        this.emblem = new THREE.Mesh(emblemGeo, M.emblem);
+        this.emblem.position.set(0, TORSO_H*0.66, -0.175);
+        this.chest.add(this.emblem);
 
         this.neckPivot = new THREE.Group(); this.neckPivot.position.y = TORSO_H; this.chest.add(this.neckPivot);
         this.neckPivot.add(bone(new THREE.CylinderGeometry(0.055,0.065,NECK_H*2,12), M.skin, NECK_H));
@@ -82,6 +93,17 @@ export class CharacterRig {
 
         const nose = new THREE.Mesh(new THREE.SphereGeometry(0.025,10,8), M.skin);
         nose.position.set(0,HEAD_R*0.95,-HEAD_R*1.05); this.headPivot.add(nose);
+        [-1,1].forEach(s => {
+            const brow = new THREE.Mesh(new THREE.BoxGeometry(0.052,0.013,0.016), M.hair);
+            brow.position.set(s*0.065, HEAD_R*1.34, -HEAD_R*0.92);
+            brow.rotation.z = s*-0.12; this.headPivot.add(brow);
+        });
+        const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.008,0.012),
+            new THREE.MeshStandardMaterial({ color: 0x9c5b4a, roughness: 0.8 }));
+        mouth.position.set(0, HEAD_R*0.55, -HEAD_R*0.95); this.headPivot.add(mouth);
+        const hairBack = new THREE.Mesh(new THREE.SphereGeometry(HEAD_R*0.92,20,14), M.hair);
+        hairBack.scale.set(1,0.85,0.7); hairBack.position.set(0, HEAD_R*1.08, HEAD_R*0.45);
+        this.headPivot.add(hairBack);
         [-1,1].forEach(s => {
             const ear = new THREE.Mesh(new THREE.SphereGeometry(0.028,8,8), M.skin);
             ear.scale.z=0.45; ear.position.set(s*(HEAD_R+0.012),HEAD_R*1.0,0); this.headPivot.add(ear);

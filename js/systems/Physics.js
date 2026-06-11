@@ -109,7 +109,7 @@ export class Physics {
                 vel.z += (mz * speed - vel.z) * expDecay(10, dt);
                 const targetAngle = Math.atan2(vel.x, vel.z);
                 const diff = wrapAngle(targetAngle - this.rig.player.rotation.y);
-                this.rig.player.rotation.y += diff * 12 * dt;
+                this.rig.player.rotation.y += diff * expDecay(12, dt);
             } else {
                 vel.x *= Math.exp(-15 * dt);
                 vel.z *= Math.exp(-15 * dt);
@@ -123,7 +123,7 @@ export class Physics {
             if (s.input.up > 0 && !s.isJumping) {
                 s.isJumping    = true;
                 s.currentState = s.STATES.FLIGHT;
-                vel.y = 12.5;
+                vel.y = s.jumpForce;
                 p.y  += 0.1;
             } else {
                 vel.y -= s.gravity * 2 * dt;
@@ -152,7 +152,7 @@ export class Physics {
                 if (s.currentPitch > 0.9 && spd < 20 && !isBoosting && p.y > 30) {
                     s.isStalling   = true;
                     s.stallProgress = 0;
-                    s.stallSpinRate = (Math.random()-0.5 < 0 ? -1 : 1) * (2 + Math.random()*2);
+                    s.stallSpinRate = (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random()*2);
                 }
             } else {
                 s.stallProgress = Math.min(1, s.stallProgress + dt/0.8);
@@ -209,11 +209,17 @@ export class Physics {
             vel.z += rem.z * Math.exp(-kL * dt);
             vel.y += rem.y * Math.exp(-kV * dt);
 
-            // ── Speed cap ─────────────────────────────────────────────
+            // ── Speed cap (soft) ──────────────────────────────────────
+            // Overspeed bleeds off exponentially instead of clamping, so
+            // releasing boost decelerates smoothly rather than snapping.
             const cap = isBoosting
                 ? (s.input.up === -1 ? s.diveSpeedCap : s.boostSpeedCap)
                 : s.normalSpeedCap * 1.5;
-            if (vel.length() > cap) vel.multiplyScalar(cap / vel.length());
+            const len = vel.length();
+            if (len > cap) {
+                const eased = len + (cap - len) * expDecay(s.kSpeedCapSoft, dt);
+                vel.multiplyScalar(eased / len);
+            }
 
             // ── Roll / bank ───────────────────────────────────────────
             const yawDelta = wrapAngle(s.currentYaw - (s._lastYaw ?? s.currentYaw));

@@ -52,16 +52,35 @@ export class CityGenerator {
         wx.fillStyle = '#030306';
         wx.fillRect(0, 0, 512, 512);
 
-        for (let wy = 6; wy < 512; wy += 26) {
+        // A few fully-lit "office floor" rows give towers believable structure
+        const litFloors = new Set();
+        for (let i = 0; i < 3; i++) litFloors.add(Math.floor(this.state.random() * 19));
+
+        for (let wy = 6, row = 0; wy < 512; wy += 26, row++) {
+            const floorLit = litFloors.has(row);
             for (let wxx = 6; wxx < 512; wxx += 22) {
                 if (wxx % 100 < 14 || wy % 100 < 10) continue;
-                if (this.state.random() > 0.38) {
-                    wx.fillStyle   = this.state.random() > 0.12 ? '#1a66ff' : '#ffddaa';
-                    wx.globalAlpha = this.state.random() * 0.75 + 0.25;
+                if (floorLit || this.state.random() > 0.38) {
+                    const t = this.state.random();
+                    wx.fillStyle = t < 0.70 ? '#1a66ff'   // cool corporate blue
+                                 : t < 0.85 ? '#2bd9e8'   // neon cyan
+                                 : t < 0.96 ? '#ffddaa'   // warm tungsten
+                                 :            '#ffffff';  // rare bright white
+                    wx.globalAlpha = floorLit
+                        ? 0.6 + this.state.random() * 0.4
+                        : this.state.random() * 0.75 + 0.25;
                     wx.fillRect(wxx, wy, 14, 19);
                 }
             }
         }
+
+        // Darken toward the base so towers read grounded, brighter at the crown
+        wx.globalAlpha = 1;
+        const grad = wx.createLinearGradient(0, 0, 0, 512);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.55)');
+        wx.fillStyle = grad;
+        wx.fillRect(0, 0, 512, 512);
 
         const winTex = new THREE.CanvasTexture(wc);
         winTex.wrapS = winTex.wrapT = THREE.RepeatWrapping;

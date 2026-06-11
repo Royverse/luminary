@@ -55,11 +55,20 @@ export class Environment {
     }
 
     _buildLights() {
-        this.scene.add(new THREE.AmbientLight(0x0d1428, 2.0));
+        this.scene.add(new THREE.AmbientLight(0x0d1428, 1.4));
+
+        // Sky/ground hemisphere fill models the character far better than
+        // flat ambient alone — cool sky from above, faint city glow below.
+        this.scene.add(new THREE.HemisphereLight(0x223a66, 0x0a0a14, 1.0));
 
         const dir = new THREE.DirectionalLight(0x3355cc, 1.2);
         dir.position.set(200, 400, 100);
         this.scene.add(dir);
+
+        // Subtle warm rim from the opposite side separates the hero from the sky
+        const rim = new THREE.DirectionalLight(0xcc8855, 0.35);
+        rim.position.set(-150, 250, -200);
+        this.scene.add(rim);
     }
 
     _buildGround() {
@@ -72,8 +81,10 @@ export class Environment {
         gx.fillRect(0, 0, 1024, 1024);
 
         for (let j = 0; j < 1024; j += 128) {
-            gx.strokeStyle = '#12121a';
-            gx.lineWidth   = 8;
+            // Major avenues get a faint cool glow; minor streets stay subtle
+            const major = j % 512 === 0;
+            gx.strokeStyle = major ? '#1b2a48' : '#12121a';
+            gx.lineWidth   = major ? 12 : 8;
             gx.beginPath(); gx.moveTo(j,    0); gx.lineTo(j,    1024); gx.stroke();
             gx.beginPath(); gx.moveTo(0,    j); gx.lineTo(1024, j);    gx.stroke();
         }
