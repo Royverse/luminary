@@ -1,178 +1,138 @@
 /**
- * js/systems/AudioManager.js
+ * js/systems/AudioManager.js — Procedural WebAudio: wind, building rumble,
+ * ring chimes, impacts and the sonic boom.
  *
- * Encapsulates every WebAudio API node and synth.
+ * The AudioContext is created on the first user gesture (browsers block it
+ * before that). Everything runs through a master compressor so stacked
+ * sounds never clip, and continuous parameters use setTargetAtTime so they
+ * glide instead of zippering.
  *
  * @ai-context
- *   OWNS      : AudioContext; wind bandpass synth; proximity rumble lowpass;
- *               collect chime; impact sawtooth; sonic boom sweep + noise.
- *   READS     : nothing from PlayerState.
- *   WRITES    : nothing to PlayerState.
- *   CALLED BY : CameraJuice (updateWind, playCollectSound);
- *               Physics (updateRumble, playImpactSound, playSonicBoom);
- *               main.js (resume on user gesture).
- *   RELATED   : Physics.js (calls impact / boom), CameraJuice.js (calls wind).
- *   ASK FOR   : No additional files needed — this module is self-contained.
- *
- * Public API used by other systems:
- *   resume()
- *   updateWind(freq, gain, pan, dt)
- *   updateRumble(targetGain, dt)
- *   playCollectSound()
- *   playImpactSound(strength)
- *   playSonicBoom()
+ *   API : unlock(), update(dt, state), playCollect(combo), playImpact(strength), playSonicBoom().
  */
+import { clamp } from '../core/math.js';
 
-import { clamp } from '../main.js';
+const PENTATONIC = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
 
 export class AudioManager {
     constructor() {
+        this.ctx = null;
+    }
+
+    /** Create or resume the context. Safe to call on every gesture. */
+    unlock() {
+        if (!this.ctx) this._init();
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    }
+
+    get ready() { return !!this.ctx && this.ctx.state === 'running'; }
+
+    _init() {
         const AC = window.AudioContext || window.webkitAudioContext;
-        this.audioCtx = new AC();
+        if (!AC) return;
+        const ctx = this.ctx = new AC();
 
-        // ── Shared noise buffer (2 s of white noise, looped) ─────────
-        const rate = this.audioCtx.sampleRate;
-        const buf  = this.audioCtx.createBuffer(1, rate * 2, rate);
-        const d    = buf.getChannelData(0);
+        const comp = ctx.createDynamicsCompressor();
+        comp.threshold.value = -14;
+        comp.ratio.value = 6;
+        this.master = ctx.createGain();
+        this.master.gain.value = 0.8;
+        this.master.connect(comp).connect(ctx.destination);
+
+        const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+        const d = buf.getChannelData(0);
         for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-        this._noiseBuf = buf;
+        this.noise = buf;
 
-        // ── Wind layer ────────────────────────────────────────────────
-        const w = this._makeNoise('bandpass', 500, 1.2);
-        this.windFilter = w.filter;
-        this.windGain   = w.gain;
+        const loop = (type, freq, q) => {
+            const src = ctx.createBufferSource();
+            src.buffer = buf; src.loop = true;
+            const filter = ctx.createBiquadFilter();
+            filter.type = type; filter.frequency.value = freq;
+            if (q) filter.Q.value = q;
+            const gain = ctx.createGain();
+            gain.gain.value = 0;
+            src.connect(filter);
+            src.start();
+            return { filter, gain };
+        };
+        const wind = loop('bandpass', 500, 1.2);
+        this.windFilter = wind.filter;
+        this.windGain = wind.gain;
+        this.windPan = ctx.createStereoPanner();
+        wind.filter.connect(this.windPan).connect(wind.gain).connect(this.master);
 
-        // Insert a stereo panner between the filter and gain node
-        this.windPanner = this.audioCtx.createStereoPanner();
-        this.windGain.disconnect();
-        this.windFilter.connect(this.windPanner);
-        this.windPanner.connect(this.windGain);
-        this.windGain.connect(this.audioCtx.destination);
-
-        // ── Rumble layer ──────────────────────────────────────────────
-        const r = this._makeNoise('lowpass', 140);
-        this.rumbleFilter = r.filter;
-        this.rumbleGain   = r.gain;
+        const rumble = loop('lowpass', 140);
+        this.rumbleGain = rumble.gain;
+        rumble.filter.connect(rumble.gain).connect(this.master);
     }
 
-    // ── Private helpers ───────────────────────────────────────────────
-
-    /** Create a looped noise source → biquad filter → gain node chain. */
-    _makeNoise(filterType, freq, Q) {
-        const src    = this.audioCtx.createBufferSource();
-        src.buffer   = this._noiseBuf;
-        src.loop     = true;
-
-        const filter = this.audioCtx.createBiquadFilter();
-        filter.type  = filterType;
-        filter.frequency.value = freq;
-        if (Q) filter.Q.value = Q;
-
-        const gain = this.audioCtx.createGain();
-        gain.gain.value = 0;
-
-        src.connect(filter);
-        filter.connect(gain);
-        gain.connect(this.audioCtx.destination);
-        src.start();
-
-        return { filter, gain };
+    update(dt, s) {
+        if (!this.ready) return;
+        const t = this.ctx.currentTime;
+        const spdN = clamp(s.velocity.length() / s.boostSpeedCap, 0, 1);
+        this.windFilter.frequency.setTargetAtTime(400 + spdN * 1800 + (s.input.brake ? 900 : 0), t, 0.1);
+        this.windGain.gain.setTargetAtTime(spdN * 0.6, t, 0.1);
+        this.windPan.pan.setTargetAtTime(clamp(-s.velocity.dot(s.rightDir) / 30, -1, 1), t, 0.1);
+        this.rumbleGain.gain.setTargetAtTime(s.buildingProximity * 0.6, t, 0.15);
     }
 
-    // ── Public API ────────────────────────────────────────────────────
-
-    /** Must be called inside a user-gesture handler (the LAUNCH button). */
-    resume() {
-        if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+    /** Bell chime; each ring in a streak climbs the pentatonic scale. */
+    playCollect(combo = 1) {
+        if (!this.ready) return;
+        const ctx = this.ctx, t = ctx.currentTime;
+        const f = 660 * Math.pow(2, PENTATONIC[Math.min(combo - 1, PENTATONIC.length - 1)] / 12);
+        for (const [mult, vol] of [[1, 0.22], [2, 0.06]]) {
+            const o = ctx.createOscillator(), g = ctx.createGain();
+            o.frequency.value = f * mult;
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+            o.connect(g).connect(this.master);
+            o.start(t); o.stop(t + 0.45);
+        }
     }
 
-    /**
-     * Smooth the wind synth parameters each frame.
-     * @param {number} targetFreq  - Target filter frequency (Hz)
-     * @param {number} targetGain  - Target gain (0–1)
-     * @param {number} targetPan   - Target pan (-1 to 1)
-     * @param {number} dt          - Delta time (seconds)
-     */
-    updateWind(targetFreq, targetGain, targetPan, dt) {
-        if (this.audioCtx.state !== 'running') return;
-        const aT = clamp(0.12, 0, 1); // fixed smoothing alpha (matches original)
-        this.windFilter.frequency.value += (targetFreq - this.windFilter.frequency.value) * aT;
-        this.windGain.gain.value        += (targetGain - this.windGain.gain.value)        * aT;
-        this.windPanner.pan.value       += (targetPan  - this.windPanner.pan.value)       * aT;
+    /** Low thud for landings and wall hits. */
+    playImpact(strength) {
+        if (!this.ready) return;
+        const ctx = this.ctx, t = ctx.currentTime, s = clamp(strength, 0, 1);
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.setValueAtTime(110 + s * 60, t);
+        o.frequency.exponentialRampToValueAtTime(38, t + 0.25);
+        g.gain.setValueAtTime(0.6 * s + 0.05, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+        o.connect(g).connect(this.master);
+        o.start(t); o.stop(t + 0.32);
+        this._noiseBurst(t, 700, 250, 0.12, 0.3 * s);
     }
 
-    /**
-     * Smooth the building-proximity rumble gain each frame.
-     * @param {number} targetGain
-     * @param {number} dt
-     */
-    updateRumble(targetGain, dt) {
-        if (this.audioCtx.state !== 'running') return;
-        this.rumbleGain.gain.value += (targetGain - this.rumbleGain.gain.value) * clamp(5 * dt, 0, 1);
-    }
-
-    /** Short rising chime played when a ring is collected. */
-    playCollectSound() {
-        if (this.audioCtx.state !== 'running') return;
-        const osc = this.audioCtx.createOscillator();
-        const g   = this.audioCtx.createGain();
-        osc.type  = 'sine';
-        osc.frequency.setValueAtTime(900,  this.audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(1800, this.audioCtx.currentTime + 0.12);
-        g.gain.setValueAtTime(0.25, this.audioCtx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 0.15);
-        osc.connect(g); g.connect(this.audioCtx.destination);
-        osc.start(); osc.stop(this.audioCtx.currentTime + 0.18);
-    }
-
-    /**
-     * Short sawtooth thud played on building / ground impact.
-     * @param {number} strength - 0–1 normalised impact force
-     */
-    playImpactSound(strength) {
-        if (this.audioCtx.state !== 'running') return;
-        const osc = this.audioCtx.createOscillator();
-        const g   = this.audioCtx.createGain();
-        osc.type  = 'sawtooth';
-        osc.frequency.setValueAtTime(60 + strength * 80, this.audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(20,   this.audioCtx.currentTime + 0.3);
-        g.gain.setValueAtTime(clamp(strength * 0.6, 0, 0.7), this.audioCtx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.001,            this.audioCtx.currentTime + 0.35);
-        osc.connect(g); g.connect(this.audioCtx.destination);
-        osc.start(); osc.stop(this.audioCtx.currentTime + 0.4);
-    }
-
-    /** Low boom + filtered noise burst played when boost activates. */
+    /** Deep boom + swept air burst when the boost kicks in. */
     playSonicBoom() {
-        if (this.audioCtx.state !== 'running') return;
-        const t = this.audioCtx.currentTime;
+        if (!this.ready) return;
+        const ctx = this.ctx, t = ctx.currentTime;
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.setValueAtTime(120, t);
+        o.frequency.exponentialRampToValueAtTime(30, t + 0.5);
+        g.gain.setValueAtTime(0.9, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+        o.connect(g).connect(this.master);
+        o.start(t); o.stop(t + 0.55);
+        this._noiseBurst(t, 900, 150, 0.45, 0.5);
+    }
 
-        // Sine sweep
-        const osc     = this.audioCtx.createOscillator();
-        const oscGain = this.audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(120, t);
-        osc.frequency.exponentialRampToValueAtTime(10, t + 0.5);
-        oscGain.gain.setValueAtTime(2.0,  t);
-        oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
-        osc.connect(oscGain); oscGain.connect(this.audioCtx.destination);
-        osc.start(t); osc.stop(t + 0.6);
-
-        // Bandpass noise burst
-        const nBuf = this.audioCtx.createBuffer(1, this.audioCtx.sampleRate * 0.5, this.audioCtx.sampleRate);
-        const nd   = nBuf.getChannelData(0);
-        for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
-
-        const noise       = this.audioCtx.createBufferSource();
-        noise.buffer      = nBuf;
-        const noiseFilter = this.audioCtx.createBiquadFilter();
-        noiseFilter.type  = 'bandpass';
-        noiseFilter.frequency.setValueAtTime(800, t);
-        noiseFilter.frequency.exponentialRampToValueAtTime(100, t + 0.4);
-        const noiseGain   = this.audioCtx.createGain();
-        noiseGain.gain.setValueAtTime(1.5,  t);
-        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
-        noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(this.audioCtx.destination);
-        noise.start(t);
+    _noiseBurst(t, fromHz, toHz, dur, vol) {
+        const ctx = this.ctx;
+        const src = ctx.createBufferSource();
+        src.buffer = this.noise;
+        const f = ctx.createBiquadFilter();
+        f.type = 'bandpass';
+        f.frequency.setValueAtTime(fromHz, t);
+        f.frequency.exponentialRampToValueAtTime(toHz, t + dur);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(vol, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        src.connect(f).connect(g).connect(this.master);
+        src.start(t, Math.random()); src.stop(t + dur + 0.05);
     }
 }

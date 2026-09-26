@@ -1,168 +1,123 @@
 /**
- * js/ui/UIManager.js
+ * js/ui/UIManager.js — All in-game DOM writes (HUD, help, prompts, flashes).
  *
- * Owns all HUD DOM writes. The rest of the engine NEVER touches DOM
- * IDs directly — it calls UIManager methods instead.
+ * The HUD is deliberately small: rings, speed, altitude, best. The controls
+ * card shows at launch, tucks itself away after a while, and H brings it back.
  *
  * @ai-context
- *   OWNS      : ALL document.getElementById calls; HUD text updates;
- *               mode badge label/colour; boost vignette opacity;
- *               flashImpact() white overlay; triggerBoomFlash() orange overlay.
- *   READS     : state.displayAlt, state.displaySpeed, state.score,
- *               state.highScore, state.totalRings, state.currentState,
- *               state.input.brake, state.velocity (for vignette spdN).
- *   WRITES    : nothing to PlayerState.
- *   RELATED   : css/style.css (all visual styles); index.html (DOM IDs);
- *               PlayerState.js (fields it reads).
- *   ASK FOR   : css/style.css + index.html if adding a new HUD element.
- *
- * Public API:
- *   update(dt, state)          — called every frame by GameEngine
- *   flashImpact(strength)      — white impact flash overlay
- *   triggerBoomFlash()         — orange supersonic-boom overlay
+ *   API     : show(), update(dt, state), ringCollected(combo), flashImpact(strength),
+ *             setPlayers([{name, speed, you}]), setModal(bool).
+ *   READS   : state.velocity, score/highScore/totalRings, showHelp, pointerLocked,
+ *             currentState, showWings.
  */
+import { clamp, damp } from '../core/math.js';
 
-import { clamp } from '../main.js';
+const HELP_AUTO_HIDE = 15;
 
 export class UIManager {
     constructor() {
-        // Cache DOM references once
-        this._alt        = document.getElementById('ui-alt');
-        this._speed      = document.getElementById('ui-speed');
-        this._score      = document.getElementById('ui-score');
-        this._highscore  = document.getElementById('ui-highscore');
-        this._modeText   = document.getElementById('mode-text');
-        this._boostVig   = document.getElementById('boost-vignette');
-        this._impactFlash = document.getElementById('impact-flash');
-        this._boomFlash   = document.getElementById('boom-flash');
-        this._scorePanel = document.getElementById('ui-score-panel');
-        this._combo      = document.getElementById('ui-combo');
-
-        this._flashTO    = null;
-        this._boomFlashTO = null;
-        this._pulseTO    = null;
-        this._lastScore  = 0;
-    }
-
-    // ─────────────────────────────────────────────────────────────────
-
-    /**
-     * Called once per frame by GameEngine.
-     * @param {number} dt
-     * @param {import('../entities/PlayerState.js').PlayerState} state
-     */
-    update(dt, state) {
-        // ── Toggle wings button binding and state sync ──────────────
-        if (!this._wingsBtnBound) {
-            this._toggleWingsBtn = document.getElementById('toggle-wings-btn');
-            if (this._toggleWingsBtn) {
-                this._toggleWingsBtn.addEventListener('click', (e) => {
-                    e.stopPropagation(); // Prevent canvas pointer lock on click
-                    state.showWings = !state.showWings;
-                });
-                this._wingsBtnBound = true;
-            }
-        }
-        if (this._toggleWingsBtn) {
-            if (state.showWings) {
-                this._toggleWingsBtn.textContent = 'WINGS';
-                this._toggleWingsBtn.className = 'ui-toggle-btn wing';
-            } else {
-                this._toggleWingsBtn.textContent = 'CAPE';
-                this._toggleWingsBtn.className = 'ui-toggle-btn cape';
-            }
-        }
-
-        const S   = state.STATES;
-        const alt = Math.max(0, state.velocity.y >= 0
-            ? state.displayAlt   // updated by CameraJuice
-            : state.displayAlt);
-
-        this._alt.textContent       = Math.floor(state.displayAlt)   + ' m';
-        this._speed.textContent     = Math.floor(state.displaySpeed)  + ' km/h';
-        this._score.textContent     = `${state.score} / ${state.totalRings}`;
-        this._highscore.textContent = state.highScore;
-
-        // ── Score pulse animation trigger ───────────────────────────
-        if (this._lastScore > 0 && state.score > this._lastScore) {
-            if (this._scorePanel) {
-                this._scorePanel.classList.remove('ring-pulse');
-                void this._scorePanel.offsetWidth; // Trigger DOM reflow
-                this._scorePanel.classList.add('ring-pulse');
-                clearTimeout(this._pulseTO);
-                this._pulseTO = setTimeout(() => {
-                    this._scorePanel.classList.remove('ring-pulse');
-                }, 450);
-            }
-        }
-        this._lastScore = state.score;
-
-        // ── Combo overlay indicator ──────────────────────────────────
-        if (this._combo) {
-            if (state.comboCount > 1) {
-                this._combo.textContent = `STREAK x${state.comboCount}`;
-                this._combo.style.opacity = '1';
-                this._combo.style.transform = 'translateY(-50%) scale(1.1)';
-            } else {
-                this._combo.style.opacity = '0';
-                this._combo.style.transform = 'translateY(-50%) scale(0.9)';
-            }
-        }
-
-        // ── Mode badge ─────────────────────────────────────────────
-        const modes = {
-            [S.IDLE]:      ['HOVER',       'var(--primary)', 'rgba(0,240,255,0.12)'],
-            [S.FLIGHT]:    ['FLIGHT',      'var(--primary)', 'rgba(0,240,255,0.12)'],
-            [S.SUPERSONIC]:['SUPERSONIC',  'var(--danger)',  'rgba(255,0,85,0.18)'],
-            [S.POWERDIVE]: ['POWER DIVE',  '#ffaa00',        'rgba(255,160,0,0.18)'],
-            [S.STALL]:     ['STALL WARNING','var(--danger)', 'rgba(255,0,85,0.25)'],
-            [S.WALK]:      ['GROUND WALK', 'var(--primary)', 'rgba(0,240,255,0.12)'],
+        const $ = id => document.getElementById(id);
+        this.el = {
+            hud: $('hud'), score: $('ui-score'), total: $('ui-total'), best: $('ui-best'),
+            speed: $('ui-speed'), alt: $('ui-alt'), streak: $('ui-streak'), ringsCard: $('ui-rings-card'),
+            help: $('help'), helpHint: $('help-hint'), prompt: $('click-prompt'),
+            boost: $('boost-vignette'), impact: $('impact-flash'),
+            players: $('ui-players-panel'), playersList: $('ui-players-list'), wingsMob: $('wings-mob-btn'),
         };
-
-        const [label, col, bg] = state.freeLook
-            ? ['FREE LOOK', 'var(--primary)', 'rgba(0,240,255,0.2)']
-            : (state.input.brake
-                ? ['AIR BRAKES', '#888', 'rgba(100,100,100,0.15)']
-                : (modes[state.currentState] || modes[S.IDLE]));
-
-        this._modeText.textContent        = label;
-        this._modeText.style.color        = col;
-        this._modeText.style.borderColor  = col;
-        this._modeText.style.backgroundColor = bg;
-
-        // ── Boost vignette ─────────────────────────────────────────
-        const boostActive = (
-            state.currentState === S.SUPERSONIC ||
-            state.currentState === S.POWERDIVE
-        );
-        const spdN = clamp(state.velocity.length() / state.boostSpeedCap, 0, 1);
-        this._boostVig.style.opacity = boostActive ? clamp(spdN, 0, 0.85) : 0;
+        this.touch = matchMedia('(pointer: coarse)').matches;
+        this.speed = 0;
+        this.alt = 0;
+        this.playTime = 0;
+        this.modal = false;
+        this._cache = new Map();
+        this._streakTO = null;
     }
 
-    /**
-     * White flash on building / ground impact.
-     * @param {number} strength  0–1
-     */
+    show() {
+        this.el.hud.style.display = 'flex';
+        document.body.classList.add('playing');
+    }
+
+    /** Hide prompts while a full-screen overlay (race result) is up. */
+    setModal(on) { this.modal = on; }
+
+    _text(key, value) {
+        if (this._cache.get(key) === value) return;
+        this._cache.set(key, value);
+        this.el[key].textContent = value;
+    }
+
+    _visible(el, on) {
+        if (el && el.classList.contains('shown') !== on) el.classList.toggle('shown', on);
+    }
+
+    update(dt, s) {
+        const S = s.STATES;
+        this.playTime += dt;
+
+        this.speed += (s.velocity.length() * 3.6 - this.speed) * damp(8, dt);
+        this.alt   += (Math.max(0, s.altitude) - this.alt) * damp(8, dt);
+        this._text('speed', String(Math.round(this.speed)));
+        this._text('alt', String(Math.round(this.alt)));
+        this._text('score', String(s.score));
+        this._text('total', String(s.totalRings));
+        this._text('best', String(s.highScore));
+
+        if (this.playTime > HELP_AUTO_HIDE && !this._autoHid) { s.showHelp = false; this._autoHid = true; }
+        this._visible(this.el.help, s.showHelp && !this.touch);
+        this._visible(this.el.helpHint, !s.showHelp && !this.touch);
+        this._visible(this.el.prompt, !this.touch && !s.pointerLocked && !this.modal);
+
+        const fast = s.currentState === S.SUPERSONIC || s.currentState === S.POWERDIVE;
+        const vig = fast ? clamp(s.velocity.length() / s.boostSpeedCap, 0, 0.8) : 0;
+        if (this._cache.get('vig') !== vig) { this._cache.set('vig', vig); this.el.boost.style.opacity = vig.toFixed(2); }
+
+        if (this.el.wingsMob) {
+            const label = s.showWings ? 'WINGS' : 'CAPE';
+            if (this.el.wingsMob.textContent !== label) {
+                this.el.wingsMob.textContent = label;
+                this.el.wingsMob.className = 'mob-btn ' + (s.showWings ? 'wing-active' : 'cape-active');
+            }
+        }
+    }
+
+    ringCollected(combo) {
+        const card = this.el.ringsCard;
+        card.classList.remove('ring-pulse');
+        void card.offsetWidth;
+        card.classList.add('ring-pulse');
+        if (combo >= 2) {
+            this.el.streak.textContent = `STREAK ×${combo}`;
+            this._visible(this.el.streak, true);
+            clearTimeout(this._streakTO);
+            this._streakTO = setTimeout(() => this._visible(this.el.streak, false), 1800);
+        }
+    }
+
     flashImpact(strength) {
-        const el = this._impactFlash;
+        const el = this.el.impact;
         el.style.transition = 'none';
-        el.style.opacity    = clamp(strength, 0, 0.5);
-        clearTimeout(this._flashTO);
-        this._flashTO = setTimeout(() => {
-            el.style.transition = 'opacity 0.25s';
-            el.style.opacity    = 0;
-        }, 40);
+        el.style.opacity = clamp(strength * 0.35, 0, 0.3);
+        void el.offsetWidth;
+        el.style.transition = 'opacity 0.35s ease-out';
+        el.style.opacity = 0;
     }
 
-    /** Orange overlay fired once when the supersonic boost activates. */
-    triggerBoomFlash() {
-        const flash = this._boomFlash;
-        flash.style.transition = 'none';
-        flash.style.opacity    = 0.8;
-        clearTimeout(this._boomFlashTO);
-        this._boomFlashTO = setTimeout(() => {
-            flash.style.transition = 'opacity 0.4s ease-out';
-            flash.style.opacity    = 0;
-        }, 40);
+    /** Multiplayer roster: [{ name, speed, you }] */
+    setPlayers(list) {
+        const panel = this.el.players;
+        panel.hidden = list.length < 2;
+        if (panel.hidden) return;
+        const rows = list.map(p => {
+            const row = document.createElement('div');
+            row.className = 'player-row' + (p.you ? ' you' : '');
+            const name = document.createElement('span');
+            name.textContent = p.you ? `${p.name} (you)` : p.name;
+            const spd = document.createElement('span');
+            spd.textContent = `${p.speed} km/h`;
+            row.append(name, spd);
+            return row;
+        });
+        this.el.playersList.replaceChildren(...rows);
     }
 }

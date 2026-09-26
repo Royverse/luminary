@@ -1,274 +1,170 @@
 /**
- * js/systems/AnimationPose.js — Character kinematics + cape cloth sim.
- * Exported as a standalone function so Animation.js stays small.
+ * js/systems/AnimationPose.js — Procedural pose for the hero (local player and peers).
+ *
+ * Every frame builds a target pose from what the hero is actually doing (ground
+ * speed, forward airspeed, climb rate), eases every joint toward it, then layers
+ * the un-smoothed oscillations (stride, breathing) on top. One code path means
+ * every transition blends on its own.
+ *
+ * Joint conventions are documented in CharacterRig.js.
  *
  * @ai-context
- *   OWNS      : ALL character pose logic (walk/jump/flight/stall/idle/braking);
- *               wing uniform time+boost updates; full cape cloth Verlet solver;
- *               body collider pushout (12 spheres, 10 iterations/frame).
- *   READS     : state.currentState, state.velocity, state.input, state.walkT,
- *               state.isStalling, state.isSprinting, state.isJumping,
- *               state.currentPitch, state.currentYaw, state.turnBank, state.simTime.
- *   WRITES    : state.walkT (increments during ground walk).
- *   MUTATES   : rig.* rotation/position fields; rig.particles[].pos;
- *               rig.wingUniforms.time / .boost;
- *               rig.cape.geometry.attributes.position.
- *   RELATED   : CharacterRig.js (defines rig structure, SEGS_W/H, particles,
- *               constraints, proxies, colliders — MUST read before editing cloth);
- *               PlayerState.js (state fields); Animation.js (calls this each frame).
- *   ASK FOR   : CharacterRig.js + PlayerState.js before editing pose or cloth.
+ *   READS     : s.STATES, s.currentState, s.velocity, s.input.{boost,brake},
+ *               s.isJumping, s.currentYaw, s.currentPitch, s.turnBank.
+ *   MUTATES   : rig.joints.* rotations, rig.anim (per-rig memory), wing uniforms,
+ *               emblem glow; steps rig.cape.
  */
-import { clamp, expDecay, wrapAngle } from '../main.js';
+import * as THREE from 'three';
+import { clamp, damp, lerp, smoothstep, wrapAngle } from '../core/math.js';
 
-export function updateCharacterPose(dt, time, state, rig) {
-    const S   = state.STATES;
-    const st  = state.currentState;
-    const ease = (cur, tgt, k) => cur + (tgt - cur) * expDecay(k, dt);
-    const isBraking  = state.input.brake;
-    const isBoosting = state.input.boost && !state.isStalling;
-    const isSuper = st === S.SUPERSONIC, isDive = st === S.POWERDIVE;
-    const isStall = st === S.STALL,      isIdle = st === S.IDLE;
-    const isWalk  = st === S.WALK;
+const CHANNELS = [
+    'tilt', 'hipsY', 'hipsX', 'hipsYaw', 'hipsZ', 'chestX', 'chestYaw', 'chestZ',
+    'neckX', 'headX', 'headYaw',
+    'shXR', 'shZR', 'elR', 'shXL', 'shZL', 'elL',
+    'hipXR', 'hipZR', 'kneeR', 'ankR', 'hipXL', 'hipZL', 'kneeL', 'ankL',
+];
+const zeroPose = () => Object.fromEntries(CHANNELS.map(c => [c, 0]));
+const _local = new THREE.Vector3();
+const _invQ = new THREE.Quaternion();
 
-    // Wings
-    if (rig.wingUniforms) {
-        rig.wingUniforms.time.value  = time;
-        rig.wingUniforms.boost.value = ease(rig.wingUniforms.boost.value, isBoosting ? 1 : 0, 4);
-    }
+/** Write `amount` of `pose` into `out` (pose only lists the channels it cares about). */
+function mix(out, pose, amount) {
+    if (amount <= 0) return;
+    for (const k in pose) out[k] += (pose[k] - out[k]) * amount;
+}
 
-    // Body tilt
-    if (rig.bodyPivot) {
-        const tgt = (isIdle || isWalk || state.isJumping) ? 0 : -Math.PI/2;
-        rig.bodyPivot.rotation.x = ease(rig.bodyPivot.rotation.x, tgt, isWalk ? 12 : 3.5);
-    }
+const arms = (shX, shZ, el, shXL = shX, shZL = shZ, elL = el) =>
+    ({ shXR: shX, shZR: shZ, elR: el, shXL, shZL, elL });
+const legs = (hipX, knee, ank, hipXL = hipX, kneeL = knee, ankL = ank, spread = 0.04) =>
+    ({ hipXR: hipX, kneeR: knee, ankR: ank, hipXL, kneeL, ankL, hipZR: spread, hipZL: spread });
 
-    // Eye glow + chest emblem pulse (emblem breathes with flight intensity)
-    if (rig.eyeL && rig.eyeR) {
-        const ei = isSuper?6:isDive?8:isStall?0.8:(isIdle||isWalk)?2:3;
-        rig.eyeL.material.emissiveIntensity = ease(rig.eyeL.material.emissiveIntensity, ei, 4);
-        rig.eyeR.material.emissiveIntensity = rig.eyeL.material.emissiveIntensity;
-        if (rig.emblem) {
-            rig.emblem.material.emissiveIntensity =
-                0.8 + rig.eyeL.material.emissiveIntensity * 0.4 + Math.sin(time * 2.2) * 0.2;
-        }
-    }
+// Upright poses (body joint angles, tilt 0)
+const STAND  = { ...arms(0.05, 0.13, 0.18), ...legs(0.02, -0.05, 0.03, 0.02, -0.05, 0.03, 0.07) };
+const HOVER  = { ...arms(0.08, 0.3, 0.42), ...legs(0.36, -0.78, -0.45, 0.06, -0.12, -0.6, 0.05) };
+const RISE   = { ...arms(Math.PI - 0.2, 0.12, 0.08, -0.08, 0.12, 0.15), ...legs(0.02, -0.06, -0.75, 0.02, -0.12, -0.75, 0.02), headX: 0.25 };
+const SINK   = { ...arms(0.35, 0.75, 0.35), ...legs(0.22, -0.4, -0.45, 0.06, -0.16, -0.45, 0.05), headX: -0.2 };
+const JUMP_UP   = { ...arms(-0.35, 0.35, 0.5, 0.6, 0.35, 0.5), ...legs(0.9, -1.3, -0.4, 0.35, -0.6, -0.35), chestX: -0.1 };
+const JUMP_DOWN = { ...arms(0.2, 0.6, 0.3), ...legs(0.28, -0.42, -0.3, 0.1, -0.22, -0.3) };
 
-    const HIP_H=0.96, aL=rig.armL, aR=rig.armR, lL=rig.legL, lR=rig.legR;
-    const isMovingOnGround = isWalk && (Math.abs(state.velocity.x)>1||Math.abs(state.velocity.z)>1);
+// Prone poses (tilt −π/2): arm "forward" (π) now points along the flight path
+const HEAD_UP = { neckX: 0.42, headX: 0.78 };
+const CRUISE = { ...arms(-0.35, 0.16, 0.2), ...legs(0, -0.25, -0.95, 0, -0.05, -0.95, 0.03), ...HEAD_UP };
+const SUPER  = { ...arms(Math.PI - 0.08, 0.04, 0, -0.35, 0.12, 0.1), ...legs(0, -0.06, -1.0, 0, -0.02, -1.0, 0.02), neckX: 0.38, headX: 0.7 };
+const DIVE   = { ...arms(Math.PI - 0.1, 0.1, 0), ...legs(0, 0, -1.05, 0, 0, -1.05, 0.01), neckX: 0.35, headX: 0.6 };
+const BRAKE  = { ...arms(0.35, 1.35, 0.35), ...legs(0.55, -0.55, -0.2, 0.45, -0.4, -0.2, 0.06), neckX: 0.25, headX: 0.45 };
 
-    if (isMovingOnGround && !state.isJumping) state.walkT += dt*(state.isSprinting?17:10.5);
-    const sin=Math.sin(state.walkT), cos=Math.cos(state.walkT);
-    const lerpK = isMovingOnGround ? 14 : 8;
+/**
+ * @param {number} dt
+ * @param {number} time
+ * @param {object} s    movement snapshot (PlayerState, or a peer's mirror of it)
+ * @param {import('../entities/CharacterRig.js').CharacterRig} rig
+ */
+export function updateCharacterPose(dt, time, s, rig) {
+    const anim = rig.anim || (rig.anim = { pose: zeroPose(), target: zeroPose(), osc: zeroPose(), phase: 0, walkW: 0, prone: 0 });
+    const T = anim.target, O = anim.osc;
+    for (const c of CHANNELS) { T[c] = 0; O[c] = 0; }
 
-    if (isWalk) {
-        const legA=state.isSprinting?1.05:0.72, armA=state.isSprinting?0.80:0.55;
-        rig.chest.rotation.x = ease(rig.chest.rotation.x, state.isSprinting?-0.12:0, 10);
+    const S = s.STATES, st = s.currentState;
+    const grounded = st === S.WALK;
+    const boosting = !!s.input.boost;
+    const braking = !!s.input.brake && !grounded;
 
-        if (isMovingOnGround) {
-            lL.thighPivot.rotation.x = ease(lL.thighPivot.rotation.x,  sin*legA, lerpK);
-            lR.thighPivot.rotation.x = ease(lR.thighPivot.rotation.x, -sin*legA, lerpK);
-            lL.kneePivot.rotation.x  = ease(lL.kneePivot.rotation.x,  Math.max(0, sin)*(state.isSprinting?1.7:1.2), lerpK);
-            lR.kneePivot.rotation.x  = ease(lR.kneePivot.rotation.x,  Math.max(0,-sin)*(state.isSprinting?1.7:1.2), lerpK);
-            lL.footPivot.rotation.x  = ease(lL.footPivot.rotation.x, -lL.kneePivot.rotation.x*0.45-sin*0.15, lerpK);
-            lR.footPivot.rotation.x  = ease(lR.footPivot.rotation.x, -lR.kneePivot.rotation.x*0.45+sin*0.15, lerpK);
-            aL.shoulderPivot.rotation.x = ease(aL.shoulderPivot.rotation.x, -sin*armA, lerpK);
-            aR.shoulderPivot.rotation.x = ease(aR.shoulderPivot.rotation.x,  sin*armA, lerpK);
-            aL.elbowPivot.rotation.x = ease(aL.elbowPivot.rotation.x, -0.08+Math.max(0, sin)*-0.5, lerpK);
-            aR.elbowPivot.rotation.x = ease(aR.elbowPivot.rotation.x, -0.08+Math.max(0,-sin)*-0.5, lerpK);
-        } else {
-            lL.thighPivot.rotation.x=ease(lL.thighPivot.rotation.x,0,lerpK);
-            lR.thighPivot.rotation.x=ease(lR.thighPivot.rotation.x,0,lerpK);
-            lL.kneePivot.rotation.x=ease(lL.kneePivot.rotation.x,0,lerpK);
-            lR.kneePivot.rotation.x=ease(lR.kneePivot.rotation.x,0,lerpK);
-            lL.footPivot.rotation.x=ease(lL.footPivot.rotation.x,0,lerpK);
-            lR.footPivot.rotation.x=ease(lR.footPivot.rotation.x,0,lerpK);
-            aL.shoulderPivot.rotation.x=ease(aL.shoulderPivot.rotation.x,0,lerpK);
-            aR.shoulderPivot.rotation.x=ease(aR.shoulderPivot.rotation.x,0,lerpK);
-            aL.elbowPivot.rotation.x=ease(aL.elbowPivot.rotation.x,-0.06,lerpK);
-            aR.elbowPivot.rotation.x=ease(aR.elbowPivot.rotation.x,-0.06,lerpK);
-        }
-        aL.shoulderPivot.rotation.z=ease(aL.shoulderPivot.rotation.z, 0.12,8);
-        aR.shoulderPivot.rotation.z=ease(aR.shoulderPivot.rotation.z,-0.12,8);
+    // Velocity in the hero's own frame: forward is −Z
+    _invQ.copy(rig.player.quaternion).invert();
+    const v = _local.copy(s.velocity).applyQuaternion(_invQ);
+    const forward = -v.z, climb = s.velocity.y;
+    const groundSpeed = Math.hypot(s.velocity.x, s.velocity.z);
 
-        const hipBob  = isMovingOnGround ? Math.abs(cos)*(state.isSprinting?0.12:0.06) : 0;
-        const hipTwist= isMovingOnGround ? sin*(state.isSprinting?0.25:0.18) : 0;
-        const hipTilt = isMovingOnGround ? -cos*0.07 : 0;
-        rig.hips.position.y=ease(rig.hips.position.y, HIP_H+hipBob, 12);
-        rig.hips.rotation.y=ease(rig.hips.rotation.y, hipTwist, 12);
-        rig.hips.rotation.z=ease(rig.hips.rotation.z, hipTilt, 12);
+    // How prone (flight-flat) the hero should be: follows real forward airspeed
+    let proneTgt = grounded ? 0 : Math.max(smoothstep(forward, 4, 14), (st === S.SUPERSONIC || st === S.POWERDIVE) ? 1 : 0);
+    if (braking) proneTgt *= 0.3;
+    anim.prone += (proneTgt - anim.prone) * damp(4, dt);
+    const prone = anim.prone;
 
-        const chestTwist=isMovingOnGround?-sin*(state.isSprinting?0.35:0.25):0;
-        rig.chest.rotation.y=ease(rig.chest.rotation.y, chestTwist, 12);
-        rig.chest.rotation.z=ease(rig.chest.rotation.z, isMovingOnGround?cos*0.06:0, 12);
-        rig.neckPivot.rotation.y=ease(rig.neckPivot.rotation.y,-(rig.hips.rotation.y+rig.chest.rotation.y),12);
-        rig.neckPivot.rotation.z=ease(rig.neckPivot.rotation.z,-(rig.hips.rotation.z+rig.chest.rotation.z),12);
+    // ── Upright layer ─────────────────────────────────────────────────
+    const moving = grounded && groundSpeed > 0.8;
+    anim.walkW += ((moving ? 1 : 0) - anim.walkW) * damp(8, dt);
+    const breath = Math.sin(time * 1.6);
 
-        if (!isMovingOnGround) {
-            const breath=Math.sin(time*1.4)*0.012;
-            rig.chest.rotation.z=ease(rig.chest.rotation.z,breath,4);
-            rig.hips.position.y=ease(rig.hips.position.y,HIP_H+Math.sin(time*1.4)*0.008,4);
-        }
-        rig.headPivot.rotation.x=ease(rig.headPivot.rotation.x,0,8);
-        rig.headPivot.rotation.y=ease(rig.headPivot.rotation.y,0,8);
+    if (grounded) {
+        mix(T, STAND, 1);
+        T.chestX = 0.015 * breath;
+        const run = smoothstep(groundSpeed, 14, 26);
+        mix(T, { chestX: -lerp(0.08, 0.3, run), headX: lerp(0.05, 0.22, run), shZR: 0.1, shZL: 0.1, elR: lerp(0.45, 1.35, run), elL: lerp(0.45, 1.35, run) }, anim.walkW);
 
-    } else if (state.isJumping) {
-        const tuck=Math.min(1,Math.abs(state.velocity.y)/state.jumpForce*1.4);
-        const legTuck=state.velocity.y>0?0.55*tuck:-0.25*tuck;
-        lL.thighPivot.rotation.x=ease(lL.thighPivot.rotation.x,legTuck+0.1,16);
-        lR.thighPivot.rotation.x=ease(lR.thighPivot.rotation.x,legTuck+0.1,16);
-        lL.kneePivot.rotation.x=ease(lL.kneePivot.rotation.x,state.velocity.y>0?1.0:0.2,16);
-        lR.kneePivot.rotation.x=ease(lR.kneePivot.rotation.x,state.velocity.y>0?1.0:0.2,16);
-        lL.footPivot.rotation.x=ease(lL.footPivot.rotation.x,-0.4,12);
-        lR.footPivot.rotation.x=ease(lR.footPivot.rotation.x,-0.4,12);
-        aL.shoulderPivot.rotation.x=ease(aL.shoulderPivot.rotation.x,-0.3,12);
-        aR.shoulderPivot.rotation.x=ease(aR.shoulderPivot.rotation.x,-0.3,12);
-        aL.shoulderPivot.rotation.z=ease(aL.shoulderPivot.rotation.z,0.4,12);
-        aR.shoulderPivot.rotation.z=ease(aR.shoulderPivot.rotation.z,-0.4,12);
-        aL.elbowPivot.rotation.x=ease(aL.elbowPivot.rotation.x,-0.3,12);
-        aR.elbowPivot.rotation.x=ease(aR.elbowPivot.rotation.x,-0.3,12);
-        rig.chest.rotation.x=ease(rig.chest.rotation.x,-0.15,12);
-        rig.hips.position.y=ease(rig.hips.position.y,HIP_H,12);
-        rig.hips.rotation.set(0,0,0); rig.neckPivot.rotation.set(0,0,0);
-
-    } else {
-        let szL=0.12,szR=-0.12,sxL=0,sxR=0,exL=-0.06,exR=-0.06;
-        let hxL=0,hxR=0,kxL=0,kxR=0,fxL=0,fxR=0;
-
-        if (isIdle) {
-            // Hover: relaxed limbs with slow asymmetric drift so it reads alive
-            szL=0.4;szR=-0.4;
-            sxL=-0.2+Math.sin(time*0.9)*0.05; sxR=-0.2+Math.cos(time*0.8)*0.05;
-            exL=-0.1;exR=-0.1;
-            hxL=0.1+Math.sin(time*0.7)*0.035; hxR=0.1+Math.cos(time*0.65)*0.035;
-        }
-        else if (isSuper) {
-            // Classic one-fist lead: left arm punched forward, right tucked at side
-            szL=0.05;szR=-0.22;
-            sxL=-Math.PI*0.95;sxR=0.35;
-            exL=0;exR=-0.55;
-            hxL=0.05;hxR=0.16;
-            fxL=0.45;fxR=0.45;
-        }
-        else if (isDive)    { szL=0.1;szR=-0.1;sxL=0.2;sxR=0.2;exL=-1.2;exR=-1.2;fxL=0.3;fxR=0.3; }
-        else if (isStall)   {
-            szL=1.3;szR=-1.3;
-            sxL=-0.9-Math.sin(time*8.5)*0.4; sxR=-0.9-Math.cos(time*7.8)*0.4;
-            exL=-0.9-Math.sin(time*8.5)*0.4; exR=-0.9-Math.cos(time*7.8)*0.4;
-            hxL=-Math.sin(time*6.2)*0.5; hxR=-Math.cos(time*5.7)*0.5;
-            kxL=-0.45-Math.sin(time*7.3)*0.35; kxR=-0.45-Math.cos(time*6.8)*0.35;
-        } else if (isBraking){ szL=1.3;szR=-1.3;sxL=-1.2;sxR=-1.2;exL=-0.2;exR=-0.2;hxL=0.3;hxR=0.3;kxL=-0.4;kxR=-0.4; }
-        else {
-            // Cruise flight: arms swept back, slightly staggered, with gentle drift
-            szL=0.28;szR=-0.32;
-            sxL=-0.35+Math.sin(time*1.1)*0.04; sxR=-0.5+Math.cos(time*1.0)*0.04;
-            exL=-0.25;exR=-0.15;
-            hxL=0.04;hxR=0.1;
-            fxL=0.35;fxR=0.35;
-        }
-
-        const r=isStall?10:6;
-        aL.shoulderPivot.rotation.z=ease(aL.shoulderPivot.rotation.z,szL,r);
-        aR.shoulderPivot.rotation.z=ease(aR.shoulderPivot.rotation.z,szR,r);
-        aL.shoulderPivot.rotation.x=ease(aL.shoulderPivot.rotation.x,sxL,r);
-        aR.shoulderPivot.rotation.x=ease(aR.shoulderPivot.rotation.x,sxR,r);
-        aL.elbowPivot.rotation.x=ease(aL.elbowPivot.rotation.x,exL,r);
-        aR.elbowPivot.rotation.x=ease(aR.elbowPivot.rotation.x,exR,r);
-        lL.thighPivot.rotation.x=ease(lL.thighPivot.rotation.x,hxL,r);
-        lR.thighPivot.rotation.x=ease(lR.thighPivot.rotation.x,hxR,r);
-        lL.kneePivot.rotation.x=ease(lL.kneePivot.rotation.x,kxL,r);
-        lR.kneePivot.rotation.x=ease(lR.kneePivot.rotation.x,kxR,r);
-        lL.footPivot.rotation.x=ease(lL.footPivot.rotation.x,fxL,r);
-        lR.footPivot.rotation.x=ease(lR.footPivot.rotation.x,fxR,r);
-        rig.hips.position.y=ease(rig.hips.position.y,HIP_H,r);
-        // Torso eases home instead of hard-resetting; chest leans into banked turns
-        const lean = (isIdle||isStall) ? 0 : state.turnBank*0.22;
-        rig.hips.rotation.x=ease(rig.hips.rotation.x,0,r);
-        rig.hips.rotation.y=ease(rig.hips.rotation.y,0,r);
-        rig.hips.rotation.z=ease(rig.hips.rotation.z,0,r);
-        rig.chest.rotation.x=ease(rig.chest.rotation.x,0,r);
-        rig.chest.rotation.y=ease(rig.chest.rotation.y,0,r);
-        rig.chest.rotation.z=ease(rig.chest.rotation.z,lean,5);
-        rig.neckPivot.rotation.x=ease(rig.neckPivot.rotation.x,0,r);
-        rig.neckPivot.rotation.y=ease(rig.neckPivot.rotation.y,0,r);
-        rig.neckPivot.rotation.z=ease(rig.neckPivot.rotation.z,-lean*0.6,5);
-
-        let hp=0,hy=0;
-        if (isWalk||isIdle||state.isJumping) {
-            hp=clamp(state.currentPitch*0.45,-0.4,0.4);
-            hy=clamp(wrapAngle(state.currentYaw-rig.player.rotation.y)*0.5,-0.8,0.8);
-            if (isIdle){ hp+=Math.sin(time*0.6)*0.05; hy+=Math.sin(time*0.4)*0.1; }
-        } else {
-            hp=Math.PI/2;
-            if (isDive) hp=Math.PI/2.5;
-            else if (isStall){ hp=0; hy=Math.sin(time*4.5)*0.35; }
-            else if (isBraking) hp=Math.PI/2.2;
-            hy+=state.turnBank*0.5;
-        }
-        rig.headPivot.rotation.x=ease(rig.headPivot.rotation.x,hp,6);
-        rig.headPivot.rotation.y=ease(rig.headPivot.rotation.y,hy,6);
-    }
-
-    // Cape cloth simulation
-    if (rig.cape && rig.particles) {
-        const ts=Math.min(dt,0.025), pv=rig.proxyVecs;
-        rig.leftPin.getWorldPosition(pv.wL); rig.rightPin.getWorldPosition(pv.wR);
-        const SW=rig.SEGS_W;
-        for (let x=0;x<=SW;x++) {
-            const t=x/SW;
-            rig.particles[x].pos.lerpVectors(pv.wR,pv.wL,t);
-            rig.particles[x].prev.copy(rig.particles[x].pos);
-        }
-        const vel=state.velocity;
-        let wX=-vel.x*0.3+Math.sin(state.simTime*1.1)*0.4;
-        let wZ=-vel.z*0.3+Math.cos(state.simTime*0.9)*0.4;
-        let wY=-vel.y*0.3;
-        if (isWalk&&state.isSprinting){ wX*=1.5;wZ*=1.5;wY-=0.5; }
-        if (isSuper){ wX*=2.5;wZ*=2.5;wY*=2.5; }
-        const grav=-14, ts2=ts*ts, n=rig.particles.length;
-        for (let i=SW+1;i<n;i++) {
-            const p=rig.particles[i];
-            if (!isFinite(p.pos.x)||!isFinite(p.pos.y)||!isFinite(p.pos.z)){
-                const pinT=(i%(SW+1))/SW;
-                p.pos.lerpVectors(pv.wR,pv.wL,pinT); p.prev.copy(p.pos); continue;
-            }
-            const vx=(p.pos.x-p.prev.x)*0.97,vy=(p.pos.y-p.prev.y)*0.97,vz=(p.pos.z-p.prev.z)*0.97;
-            p.prev.copy(p.pos);
-            p.pos.x+=vx+wX*ts2; p.pos.y+=vy+(grav+wY)*ts2; p.pos.z+=vz+wZ*ts2;
-            if(p.pos.y<0.05){p.pos.y=0.05;p.prev.y=0.05;}
-        }
-        rig.proxies.neck.getWorldPosition(pv.wNeck);
-        rig.proxies.spineT.getWorldPosition(pv.wSpineT);
-        rig.proxies.spineM.getWorldPosition(pv.wSpineM);
-        rig.proxies.waist.getWorldPosition(pv.wWaist);
-        rig.proxies.hip.getWorldPosition(pv.wHip);
-        rig.proxies.hipLow.getWorldPosition(pv.wHipLow);
-        rig.proxies.shL.getWorldPosition(pv.wShL); rig.proxies.shR.getWorldPosition(pv.wShR);
-        rig.proxies.calfL.getWorldPosition(pv.wCalfL); rig.proxies.calfR.getWorldPosition(pv.wCalfR);
-        rig.proxies.calfLL.getWorldPosition(pv.wCalfLL); rig.proxies.calfRL.getWorldPosition(pv.wCalfRL);
-        const pushOut=(pos,c,r)=>{
-            const dx=pos.x-c.x,dy=pos.y-c.y,dz=pos.z-c.z;
-            const d=Math.sqrt(dx*dx+dy*dy+dz*dz);
-            if(d>0&&d<r){const push=(r-d)/d;pos.x+=dx*push;pos.y+=dy*push;pos.z+=dz*push;}
+        if (moving) anim.phase += dt * (1.5 + groundSpeed * 0.055) * Math.PI * 2;
+        const w = anim.walkW, ph = anim.phase, sn = Math.sin(ph), cs = Math.cos(ph);
+        const stride = lerp(0.55, 0.85, run), knee = lerp(1.0, 1.6, run), arm = lerp(0.5, 0.95, run);
+        const legCycle = (sinP, cosP) => {
+            const hip = stride * sinP;
+            const k = -(0.12 + knee * Math.max(0, Math.cos(Math.atan2(sinP, cosP) + 0.4)));
+            const stance = smoothstep(-cosP, -0.2, 0.4);
+            return [hip, k, lerp(-0.35 - 0.3 * run, -(hip + k), stance)];
         };
-        for(let iter=0;iter<10;iter++){
-            for(let i=SW+1;i<n;i++){
-                const pos=rig.particles[i].pos;
-                for(let c=0;c<rig.colliders.length;c++) pushOut(pos,rig.colliders[c][0],rig.colliders[c][1]);
-            }
-            const cLen=rig.constraints.length;
-            for(let c=0;c<cLen;c+=3){
-                const i1=rig.constraints[c],i2=rig.constraints[c+1],rest=rig.constraints[c+2];
-                const p1=rig.particles[i1],p2=rig.particles[i2];
-                pv.diff.subVectors(p2.pos,p1.pos);
-                const dist=pv.diff.length(); if(dist<1e-6)continue;
-                const factor=(1-rest/dist)*0.5;
-                if(!p1.pinned){p1.pos.x+=pv.diff.x*factor;p1.pos.y+=pv.diff.y*factor;p1.pos.z+=pv.diff.z*factor;}
-                if(!p2.pinned){p2.pos.x-=pv.diff.x*factor;p2.pos.y-=pv.diff.y*factor;p2.pos.z-=pv.diff.z*factor;}
-            }
-        }
-        const arr=rig.cape.geometry.attributes.position.array;
-        for(let i=0;i<n;i++){arr[i*3]=rig.particles[i].pos.x;arr[i*3+1]=rig.particles[i].pos.y;arr[i*3+2]=rig.particles[i].pos.z;}
-        rig.cape.geometry.attributes.position.needsUpdate=true;
-        rig.cape.geometry.computeVertexNormals();
+        const [hR, kR, aR] = legCycle(sn, cs), [hL, kL, aL] = legCycle(-sn, -cs);
+        O.hipXR = hR * w; O.kneeR = kR * w; O.ankR = (aR - T.ankR) * w;
+        O.hipXL = hL * w; O.kneeL = kL * w; O.ankL = (aL - T.ankL) * w;
+        O.shXR = -arm * sn * w;            O.shXL = arm * sn * w;
+        O.elR = 0.25 * Math.max(0, -sn) * w; O.elL = 0.25 * Math.max(0, sn) * w;
+        O.hipsYaw = 0.12 * sn * w;          O.chestYaw = -0.2 * sn * w;
+        O.chestZ = 0.03 * sn * w;
+        O.hipsY = -0.05 * (1 + Math.cos(2 * ph)) * 0.5 * w + 0.006 * breath * (1 - w);
+    } else if (s.isJumping) {
+        mix(T, JUMP_DOWN, 1);
+        mix(T, JUMP_UP, smoothstep(climb, -4, 4));
+    } else {
+        mix(T, HOVER, 1);
+        mix(T, RISE, smoothstep(climb, 3, 10));
+        mix(T, SINK, smoothstep(-climb, 3, 10));
+        O.hipsY = 0.02 * Math.sin(time * 1.3);
+        O.chestX = 0.02 * Math.sin(time * 1.3 + 0.6);
+        O.shZR = O.shZL = 0.03 * Math.sin(time * 0.9);
     }
+
+    // Head follows the camera while upright (mostly faces forward when running)
+    const look = (1 - prone) * (1 - 0.7 * anim.walkW);
+    T.headYaw += clamp(wrapAngle(s.currentYaw - rig.player.rotation.y), -0.75, 0.75) * 0.8 * look;
+    T.headX += clamp(s.currentPitch * 0.5, -0.4, 0.35) * look;
+
+    // ── Prone (flight) layer ──────────────────────────────────────────
+    if (prone > 0.001) {
+        const flight = braking ? BRAKE : st === S.POWERDIVE ? DIVE : st === S.SUPERSONIC ? SUPER : CRUISE;
+        const F = { ...zeroPose(), ...flight };
+        F.chestYaw = -clamp(s.turnBank || 0, -1, 1) * 0.25;
+        mix(T, F, prone);
+        O.shXR += 0.04 * Math.sin(time * 1.1) * prone;
+        O.shXL += 0.04 * Math.cos(time * 1.0) * prone;
+    }
+    T.tilt = -Math.PI / 2 * prone;
+
+    // ── Ease + apply ──────────────────────────────────────────────────
+    const k = damp(grounded ? 12 : 7, dt);
+    const P = anim.pose;
+    for (const c of CHANNELS) P[c] += (T[c] - P[c]) * (c === 'tilt' ? 1 : k);
+    const q = c => P[c] + O[c];
+
+    const J = rig.joints;
+    J.body.rotation.x = q('tilt');
+    J.hips.position.y = q('hipsY');
+    J.hips.rotation.set(q('hipsX'), q('hipsYaw'), q('hipsZ'));
+    J.chest.rotation.set(q('chestX'), q('chestYaw'), q('chestZ'));
+    J.neck.rotation.x = q('neckX');
+    J.head.rotation.set(q('headX'), q('headYaw'), 0);
+    J.shoulderR.rotation.set(q('shXR'), 0, q('shZR'));
+    J.shoulderL.rotation.set(q('shXL'), 0, -q('shZL'));
+    J.elbowR.rotation.x = q('elR');
+    J.elbowL.rotation.x = q('elL');
+    J.hipR.rotation.set(q('hipXR'), 0, q('hipZR'));
+    J.hipL.rotation.set(q('hipXL'), 0, -q('hipZL'));
+    J.kneeR.rotation.x = q('kneeR');
+    J.kneeL.rotation.x = q('kneeL');
+    J.ankleR.rotation.x = q('ankR');
+    J.ankleL.rotation.x = q('ankL');
+
+    // ── Glow, wings, cape ─────────────────────────────────────────────
+    const wu = rig.wingUniforms;
+    wu.time.value = time;
+    wu.boost.value += ((boosting && !grounded ? 1 : 0) - wu.boost.value) * damp(4, dt);
+    rig.emblemMat.emissiveIntensity = 1.8 + 0.35 * Math.sin(time * 2.2) + wu.boost.value * 1.5;
+    rig.cape.update(dt, s.velocity);
 }

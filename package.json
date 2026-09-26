@@ -2,9 +2,9 @@
   "name": "project-mootsana",
   "version": "1.0.0",
   "description": "A browser-based 3D superhero flight game built with Three.js.",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node scratch/server.js",
+    "test": "playwright test"
   },
   "repository": {
     "type": "git",

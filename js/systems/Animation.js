@@ -1,24 +1,94 @@
 /**
- * js/systems/Animation.js
+ * js/systems/Animation.js — Hero pose driver + visual effects.
  *
- * Drives: character pose, cape cloth, trail ribbon, shockwaves, landing dust.
- * spawnShockwave() and triggerLandingDust() are called by Physics.
+ * Effects are deliberately few: a speed trail while supersonic, one shockwave
+ * ring when the boost kicks in, dust on hard landings, and a soft blob shadow
+ * that makes jumps and landings readable.
  *
  * @ai-context
- *   OWNS      : trail ribbon mesh; shockwave ring pool (4 instances);
- *               landing dust Points; spawnShockwave(); triggerLandingDust().
- *   READS     : state.currentState, state.velocity, state.STATES.
- *   WRITES    : nothing to PlayerState.
+ *   OWNS      : Trail (also used for peers), shockwave pool, landing dust, blob shadow.
  *   CALLS     : AnimationPose.updateCharacterPose() every frame.
- *   RELATED   : AnimationPose.js (all kinematics live there),
- *               CharacterRig.js (mesh refs passed as `rig`),
- *               Physics.js (calls spawnShockwave / triggerLandingDust).
- *   ASK FOR   : AnimationPose.js for any pose/cloth changes;
- *               CharacterRig.js to understand rig structure.
+ *   API       : update(dt, time), shockwave(), landingDust(position, strength).
  */
 import * as THREE from 'three';
-import { clamp, lerp, expDecay } from '../main.js';
-import { updateCharacterPose }   from './AnimationPose.js';
+import { clamp, damp } from '../core/math.js';
+import { updateCharacterPose } from './AnimationPose.js';
+
+const _v = new THREE.Vector3();
+const _right = new THREE.Vector3();
+
+/**
+ * Tapered, fading ribbon that follows a point. Sampled at a fixed rate.
+ * Fades by view depth, so a chase cam never looks down a glowing tube while
+ * side views (turns, free look, other players) still show the full streak.
+ */
+export class Trail {
+    constructor(scene, color, { samples = 18, width = 0.32 } = {}) {
+        this.color = new THREE.Color(color);
+        this.samples = samples;
+        this.width = width;
+        this.points = Array.from({ length: samples }, () => new THREE.Vector3());
+        this.count = 0;
+        this.intensity = 0;
+        this._clock = 0;
+
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(samples * 6), 3));
+        geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(samples * 6), 3));
+        const index = [];
+        for (let i = 0; i < samples - 1; i++) { const a = i * 2; index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+        geo.setIndex(index);
+        const mat = new THREE.MeshBasicMaterial({
+            vertexColors: true, transparent: true, depthWrite: false,
+            side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+        });
+        // Fade by view depth in the shader, so it always uses this frame's camera
+        mat.onBeforeCompile = shader => {
+            shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>',
+                '#include <project_vertex>\n\tvColor *= smoothstep(6.0, 20.0, -mvPosition.z);');
+        };
+        this.mesh = new THREE.Mesh(geo, mat);
+        this.mesh.frustumCulled = false;
+        this.mesh.visible = false;
+        scene.add(this.mesh);
+    }
+
+    update(dt, head, right, active) {
+        this.intensity += ((active ? 1 : 0) - this.intensity) * damp(active ? 8 : 4, dt);
+        if (this.intensity < 0.01) { this.mesh.visible = false; this.count = 0; return; }
+        this.mesh.visible = true;
+
+        this._clock += dt;
+        if (this.count === 0 || this._clock >= 1 / 50) {
+            this._clock = 0;
+            for (let i = this.samples - 1; i > 0; i--) this.points[i].copy(this.points[i - 1]);
+            this.count = Math.min(this.count + 1, this.samples);
+        }
+        this.points[0].copy(head);
+
+        const pos = this.mesh.geometry.attributes.position.array;
+        const col = this.mesh.geometry.attributes.color.array;
+        for (let i = 0; i < this.samples; i++) {
+            const p = this.points[Math.min(i, this.count - 1)];
+            const f = i < this.count ? 1 - i / this.samples : 0;
+            const w = this.width * f, c = 0.7 * this.intensity * f * f * f;
+            const j = i * 6;
+            pos[j]     = p.x - right.x * w; pos[j + 1] = p.y - right.y * w; pos[j + 2] = p.z - right.z * w;
+            pos[j + 3] = p.x + right.x * w; pos[j + 4] = p.y + right.y * w; pos[j + 5] = p.z + right.z * w;
+            col[j] = col[j + 3] = this.color.r * c;
+            col[j + 1] = col[j + 4] = this.color.g * c;
+            col[j + 2] = col[j + 5] = this.color.b * c;
+        }
+        this.mesh.geometry.attributes.position.needsUpdate = true;
+        this.mesh.geometry.attributes.color.needsUpdate = true;
+    }
+
+    dispose() {
+        this.mesh.parent?.remove(this.mesh);
+        this.mesh.geometry.dispose();
+        this.mesh.material.dispose();
+    }
+}
 
 export class Animation {
     constructor(state, rig, scene) {
@@ -26,156 +96,120 @@ export class Animation {
         this.rig   = rig;
         this.scene = scene;
 
-        this._trailPositions = [];
-        this._trailMaxLen    = 40;
-        this.shockwaves      = [];
-        this.dustActive      = false;
-        this.dustTimer       = 0;
-
-        this._buildTrail();
-        this._buildShockwavePool();
-        this._buildLandingDust();
+        this.trail = new Trail(scene, 0x39d8ff);
+        this._buildShockwaves();
+        this._buildDust();
+        this._buildShadow();
     }
 
-    _buildTrail() {
-        const segs  = this._trailMaxLen;
-        const verts = new Float32Array(segs * 6 * 3);
-        this._trailGeom = new THREE.BufferGeometry();
-        this._trailGeom.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-        this._trailMat = new THREE.MeshBasicMaterial({
-            color: 0x00aaff, transparent: true, opacity: 0,
-            side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
-        });
-        this._trail = new THREE.Mesh(this._trailGeom, this._trailMat);
-        this._trail.frustumCulled = false;
-        this.scene.add(this._trail);
-        for (let i = 0; i < segs; i++) this._trailPositions.push(new THREE.Vector3(0, 160, 0));
-    }
-
-    _buildShockwavePool() {
-        for (let i = 0; i < 4; i++) {
-            const group = new THREE.Group();
-            const ring  = new THREE.Mesh(
-                new THREE.TorusGeometry(1.5, 0.5, 16, 64),
-                new THREE.MeshBasicMaterial({ color:0x00ffff, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false })
+    _buildShockwaves() {
+        this.shockwaves = [];
+        for (let i = 0; i < 2; i++) {
+            const ring = new THREE.Mesh(
+                new THREE.TorusGeometry(1, 0.06, 8, 64),
+                new THREE.MeshBasicMaterial({ color: 0x9ff0ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
             );
-            const coneGeom = new THREE.CylinderGeometry(0, 3.5, 5, 32, 1, true);
-            coneGeom.translate(0, -1.5, 0);
-            const cone = new THREE.Mesh(coneGeom, new THREE.MeshBasicMaterial({
-                color:0x00aaff, transparent:true, opacity:0,
-                blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide,
-            }));
-            cone.rotation.x = -Math.PI / 2;
-            group.add(ring, cone); group.visible = false;
-            this.scene.add(group);
-            this.shockwaves.push({ group, ring, cone, active: false, t: 0 });
+            ring.visible = false;
+            this.scene.add(ring);
+            this.shockwaves.push({ ring, t: 1 });
         }
     }
 
-    _buildLandingDust() {
-        const count = 80;
-        const geom  = new THREE.BufferGeometry();
-        geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
-        const mat = new THREE.PointsMaterial({
-            color:0xaabbff, size:1.4, transparent:true, opacity:0,
-            blending:THREE.AdditiveBlending, depthWrite:false,
-        });
-        this._dustPoints = new THREE.Points(geom, mat);
-        this._dustVels   = Array.from({ length: count }, () =>
-            new THREE.Vector3((Math.random()-0.5)*18, Math.random()*12+4, (Math.random()-0.5)*18)
-        );
-        this.scene.add(this._dustPoints);
+    _buildDust() {
+        const count = 60;
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+        this.dust = new THREE.Points(geo, new THREE.PointsMaterial({
+            color: 0x9fb4d8, size: 0.7, transparent: true, opacity: 0, depthWrite: false,
+        }));
+        this.dust.frustumCulled = false;
+        this.dust.visible = false;
+        this.dustVel = Array.from({ length: count }, () => new THREE.Vector3());
+        this.dustT = 1;
+        this.scene.add(this.dust);
     }
 
-    // ── Public API (called by Physics) ────────────────────────────────
-
-    spawnShockwave() {
-        const sw = this.shockwaves.find(s => !s.active);
-        if (!sw) return;
-        sw.active = true; sw.t = 0;
-        sw.group.position.copy(this.rig.player.position);
-        sw.group.quaternion.copy(this.rig.player.quaternion);
-        sw.group.visible = true;
+    _buildShadow() {
+        const c = document.createElement('canvas');
+        c.width = c.height = 64;
+        const g = c.getContext('2d');
+        const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+        grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 64, 64);
+        const geo = new THREE.PlaneGeometry(1, 1);
+        geo.rotateX(-Math.PI / 2);
+        this.shadow = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+            map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false,
+            polygonOffset: true, polygonOffsetFactor: -2,
+        }));
+        this.scene.add(this.shadow);
     }
 
-    triggerLandingDust(origin, strength) {
-        this.dustActive = true; this.dustTimer = 0;
-        const pos = this._dustPoints.geometry.attributes.position.array;
-        for (let i = 0; i < pos.length; i += 3) {
-            pos[i]   = origin.x + (Math.random()-0.5)*4;
-            pos[i+1] = origin.y + 0.5;
-            pos[i+2] = origin.z + (Math.random()-0.5)*4;
+    /** One expanding ring, perpendicular to the flight path. */
+    shockwave() {
+        const sw = this.shockwaves.find(s => s.t >= 1) || this.shockwaves[0];
+        sw.t = 0;
+        sw.ring.visible = true;
+        this.rig.centerWorld(sw.ring.position);
+        sw.ring.quaternion.copy(this.rig.player.quaternion);
+    }
+
+    landingDust(origin, strength) {
+        const pos = this.dust.geometry.attributes.position.array;
+        const sc = clamp(strength, 0.3, 2);
+        for (let i = 0; i < this.dustVel.length; i++) {
+            const a = Math.random() * Math.PI * 2, r = Math.random();
+            pos[i * 3] = origin.x + Math.cos(a) * r;
+            pos[i * 3 + 1] = origin.y + 0.2;
+            pos[i * 3 + 2] = origin.z + Math.sin(a) * r;
+            this.dustVel[i].set(Math.cos(a) * (6 + Math.random() * 8) * sc, (1 + Math.random() * 4) * sc, Math.sin(a) * (6 + Math.random() * 8) * sc);
         }
-        this._dustPoints.geometry.attributes.position.needsUpdate = true;
-        this._dustPoints.material.opacity = Math.min(0.7, strength * 0.5);
-        const sc = clamp(strength, 0.3, 2.5);
-        for (const v of this._dustVels)
-            v.set((Math.random()-0.5)*20*sc, Math.random()*14*sc+2, (Math.random()-0.5)*20*sc);
+        this.dustT = 0;
+        this.dust.visible = true;
     }
-
-    // ── Per-frame update ──────────────────────────────────────────────
 
     update(dt, time) {
-        updateCharacterPose(dt, time, this.state, this.rig);
-        this.rig.wingL.visible = this.state.showWings;
-        this.rig.wingR.visible = this.state.showWings;
-        this.rig.cape.visible  = !this.state.showWings;
-        this._updateTrail();
-        this._updateShockwaves(dt);
-        this._updateDust(dt);
-    }
+        const s = this.state, S = s.STATES, player = this.rig.player;
+        updateCharacterPose(dt, time, s, this.rig);
 
-    _updateTrail() {
-        const p = this.rig.player.position;
-        this._trailPositions.unshift(p.clone());
-        if (this._trailPositions.length > this._trailMaxLen) this._trailPositions.pop();
+        // Trail from the hips while supersonic / diving
+        const fast = s.currentState === S.SUPERSONIC || s.currentState === S.POWERDIVE;
+        this.rig.centerWorld(_v);
+        _right.set(1, 0, 0).applyQuaternion(player.quaternion);
+        this.trail.update(dt, _v, _right, fast && s.velocity.length() > 60);
 
-        const S = this.state.STATES;
-        const visible = this.state.currentState === S.SUPERSONIC || this.state.currentState === S.POWERDIVE;
-        const tgtOp   = visible ? clamp(this.state.velocity.length() / 200, 0, 0.6) : 0;
-        this._trailMat.opacity = lerp(this._trailMat.opacity, tgtOp, 0.15);
-        if (!visible && this._trailMat.opacity < 0.01) return;
-
-        const pos   = this._trailGeom.attributes.position.array;
-        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.rig.player.quaternion);
-        for (let i = 0; i < this._trailPositions.length - 1; i++) {
-            const a = this._trailPositions[i], b = this._trailPositions[i+1];
-            const hw = 0.6 * (1 - i / this._trailPositions.length);
-            const base = i * 18;
-            pos[base+0]=a.x-right.x*hw; pos[base+1]=a.y-right.y*hw; pos[base+2]=a.z-right.z*hw;
-            pos[base+3]=a.x+right.x*hw; pos[base+4]=a.y+right.y*hw; pos[base+5]=a.z+right.z*hw;
-            pos[base+6]=b.x-right.x*hw; pos[base+7]=b.y-right.y*hw; pos[base+8]=b.z-right.z*hw;
-            pos[base+9]=a.x+right.x*hw; pos[base+10]=a.y+right.y*hw; pos[base+11]=a.z+right.z*hw;
-            pos[base+12]=b.x+right.x*hw; pos[base+13]=b.y+right.y*hw; pos[base+14]=b.z+right.z*hw;
-            pos[base+15]=b.x-right.x*hw; pos[base+16]=b.y-right.y*hw; pos[base+17]=b.z-right.z*hw;
-        }
-        this._trailGeom.attributes.position.needsUpdate = true;
-    }
-
-    _updateShockwaves(dt) {
         for (const sw of this.shockwaves) {
-            if (!sw.active) continue;
-            sw.t += dt * 2.2;
-            const s  = 1 + sw.t * 35;
-            sw.group.scale.set(s, s, s);
-            const op = Math.max(0, 1.0 - sw.t * 1.8);
-            sw.ring.material.opacity  = op;
-            sw.cone.material.opacity  = op * 0.45;
-            if (sw.t > 0.55) { sw.active = false; sw.group.visible = false; }
+            if (sw.t >= 1) continue;
+            sw.t = Math.min(1, sw.t + dt * 2.2);
+            const e = 1 - Math.pow(1 - sw.t, 3);
+            sw.ring.scale.setScalar(2 + e * 16);
+            sw.ring.material.opacity = (1 - sw.t) * 0.6;
+            if (sw.t >= 1) sw.ring.visible = false;
         }
-    }
 
-    _updateDust(dt) {
-        if (!this.dustActive) return;
-        this.dustTimer += dt;
-        if (this.dustTimer > 1.2) { this.dustActive = false; this._dustPoints.material.opacity = 0; return; }
-        const pos = this._dustPoints.geometry.attributes.position.array;
-        for (let i = 0; i < this._dustVels.length; i++) {
-            const v = this._dustVels[i];
-            pos[i*3]+=v.x*dt; pos[i*3+1]+=v.y*dt; pos[i*3+2]+=v.z*dt;
-            v.y -= 18 * dt;
+        if (this.dust.visible) {
+            this.dustT += dt;
+            const pos = this.dust.geometry.attributes.position.array;
+            for (let i = 0; i < this.dustVel.length; i++) {
+                const v = this.dustVel[i];
+                v.multiplyScalar(Math.exp(-3 * dt));
+                pos[i * 3] += v.x * dt; pos[i * 3 + 1] += v.y * dt; pos[i * 3 + 2] += v.z * dt;
+            }
+            this.dust.geometry.attributes.position.needsUpdate = true;
+            this.dust.material.opacity = clamp(0.5 * (1 - this.dustT / 0.9), 0, 0.5);
+            if (this.dustT > 0.9) this.dust.visible = false;
         }
-        this._dustPoints.geometry.attributes.position.needsUpdate = true;
-        this._dustPoints.material.opacity = clamp((1 - this.dustTimer/1.2)*0.7, 0, 0.7);
+
+        // Blob shadow on whatever is below (ground or rooftop)
+        const h = player.position.y - s.groundHeight;
+        this.shadow.visible = h < 40;
+        if (this.shadow.visible) {
+            this.rig.centerWorld(_v);
+            this.shadow.position.set(_v.x, s.groundHeight + 0.05, _v.z);
+            this.shadow.scale.setScalar(3.2 + h * 0.06);
+            this.shadow.material.opacity = clamp(1 - h / 40, 0, 1);
+        }
     }
 }

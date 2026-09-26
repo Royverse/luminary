@@ -5,20 +5,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>LUMINARY — Flight Engine</title>
-    <meta name="description" content="Experience high-octane superhero flight in LUMINARY. A premium 3D flight engine with supersonic boosts, energy wings, and a stunning neon cityscape.">
+    <meta name="description" content="Fly a caped hero through a neon city. Walk, jump, take off, and chase chains of golden rings — solo or racing a friend.">
 
-    <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><defs><linearGradient id=%22g%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22><stop offset=%220%25%22 stop-color=%22%2300f0ff%22/><stop offset=%22100%25%22 stop-color=%22%23ff0055%22/></linearGradient></defs><path d=%22M50 15 L85 50 L50 85 L15 50 Z%22 fill=%22none%22 stroke=%22url(%23g)%22 stroke-width=%228%22/><path d=%22M50 32 L70 50 L50 68 L30 50 Z%22 fill=%22url(%23g)%22 opacity=%220.85%22/></svg>">
 
-    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
-
-    <!-- Styles (extracted from inline) -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
 
-    <!-- Three.js import map -->
     <script type="importmap">
     {
         "imports": {
@@ -32,132 +27,98 @@
 
 <body>
 
-    <!-- ── Loader overlay ─────────────────────────────────────── -->
+    <!-- ── Title + lobby ─────────────────────────────────────── -->
     <div id="loader">
-        <div class="spinner"></div>
+        <svg class="logo" viewBox="0 0 100 100" aria-hidden="true">
+            <defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00f0ff"/><stop offset="100%" stop-color="#ff0055"/></linearGradient></defs>
+            <path d="M50 15 L85 50 L50 85 L15 50 Z" fill="none" stroke="url(#lg)" stroke-width="5"/>
+            <path d="M50 32 L70 50 L50 68 L30 50 Z" fill="url(#lg)" opacity="0.85"/>
+        </svg>
         <h1>LUMINARY</h1>
-        <p>FLIGHT ENGINE</p>
+        <p>FLY THE CITY</p>
         <div id="lobby-panel" class="lobby-glass-panel">
-            <div class="lobby-row">
-                <input type="text" id="nickname-input" placeholder="ENTER NICKNAME" maxlength="12" />
-            </div>
-            
+            <input type="text" id="nickname-input" placeholder="YOUR NAME" maxlength="12" autocomplete="off" />
             <div class="lobby-row" id="room-controls-row">
-                <button id="start-btn" class="lobby-btn" style="display: block; margin: 0; padding: 12px 20px;">LAUNCH SOLO</button>
-                <button id="host-mp-btn" class="lobby-btn secondary">HOST MULTIPLAYER</button>
+                <button id="start-btn" class="lobby-btn">FLY SOLO</button>
+                <button id="host-mp-btn" class="lobby-btn secondary">RACE A FRIEND</button>
             </div>
-
-            <div id="mp-lobby-details" style="display: none; width: 100%; flex-direction: column; gap: 16px;">
-                <div class="lobby-status" id="lobby-status-text">Creating Room...</div>
-                
-                <div class="share-box" id="lobby-share-box" style="display: none;">
-                    <div class="share-label">SHARE LINK WITH A FRIEND:</div>
+            <div id="mp-lobby-details" hidden>
+                <div class="lobby-status" id="lobby-status-text">Creating room…</div>
+                <div class="share-box" id="lobby-share-box" hidden>
+                    <div class="share-label">Send this link to a friend</div>
                     <div class="share-url-container">
                         <input type="text" id="share-url-input" readonly />
                         <button id="copy-url-btn">COPY</button>
                     </div>
                 </div>
-
-                <div class="player-list-container" id="lobby-players-box" style="display: none;">
-                    <div class="share-label">PLAYERS IN LOBBY:</div>
-                    <ul id="lobby-player-list">
-                        <!-- Populated dynamically -->
-                    </ul>
+                <div class="player-list-container" id="lobby-players-box" hidden>
+                    <div class="share-label">In the lobby</div>
+                    <ul id="lobby-player-list"></ul>
                 </div>
-                
-                <button id="launch-mp-btn" class="lobby-btn" style="display: none; width: 100%;">LAUNCH SESSION</button>
+                <button id="launch-mp-btn" class="lobby-btn" hidden>START RACE</button>
             </div>
         </div>
-        <a href="https://github.com/Royverse/luminary" target="_blank" class="github-link">
-            <svg class="github-icon" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+        <a href="https://github.com/Royverse/luminary" target="_blank" rel="noopener" class="github-link">
+            <svg class="github-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
             view source
         </a>
     </div>
 
-    <!-- ── Screen-space overlays ──────────────────────────────── -->
+    <!-- ── Screen-space overlays ─────────────────────────────── -->
     <div id="vignette"></div>
     <div id="boost-vignette"></div>
     <div id="impact-flash"></div>
-    <div id="boom-flash"></div>
 
-    <!-- ── HUD ────────────────────────────────────────────────── -->
+    <!-- ── HUD ───────────────────────────────────────────────── -->
     <div id="hud">
-        <div class="glass-panel" id="ui-players-panel" style="display: none;">
-            <div class="hud-label">Connected Players</div>
-            <div id="ui-players-list" style="font-size: 0.62rem; color: #8fa0af; font-family: 'JetBrains Mono', monospace; line-height: 1.4; display: flex; flex-direction: column; gap: 4px;">
-                <!-- Populated dynamically -->
+        <div class="hud-card" id="ui-rings-card">
+            <div class="hud-label">Rings</div>
+            <div class="hud-rings"><span id="ui-score">0</span><span class="hud-total"> / <span id="ui-total">150</span></span></div>
+            <div class="hud-stats">
+                <span><b id="ui-speed">0</b> km/h</span>
+                <span><b id="ui-alt">0</b> m</span>
+                <span>best <b id="ui-best">0</b></span>
             </div>
         </div>
-        <div class="glass-panel">
-            <div class="hud-label">Altitude</div>
-            <div class="hud-value" id="ui-alt">0 m</div>
-        </div>
-        <div class="glass-panel">
-            <div class="hud-label">Airspeed</div>
-            <div class="hud-value" id="ui-speed">0 km/h</div>
-        </div>
-        <div class="glass-panel" id="ui-score-panel" style="position:relative">
-            <div class="hud-label">Energy Rings</div>
-            <div class="hud-value" id="ui-score" style="color:var(--gold)">0 / 150</div>
-            <div id="ui-combo" style="position:absolute; right:16px; top:50%; transform:translateY(-50%); font-size:.56rem; font-weight:700; letter-spacing:.15em; color:var(--primary); text-shadow:0 0 10px rgba(0, 240, 255, 0.4); opacity:0; transition:opacity 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events:none; text-transform:uppercase">x0</div>
-        </div>
-        <div class="glass-panel">
-            <div class="hud-label">High Score</div>
-            <div class="hud-value" id="ui-highscore" style="color:var(--gold)">0</div>
+        <div id="ui-streak" class="fade"></div>
+        <div class="hud-card" id="ui-players-panel" hidden>
+            <div class="hud-label">Racers</div>
+            <div id="ui-players-list"></div>
         </div>
     </div>
 
-    <!-- ── Mode badge ─────────────────────────────────────────── -->
-    <div id="mode-badge">
-        <div id="mode-text">HOVER</div>
-    </div>
-
-    <!-- ── Controls legend ────────────────────────────────────── -->
-    <div id="instructions">
-        <div class="glass-panel">
-            <div class="hud-label" style="margin-bottom:8px">CONTROLS</div>
-            <div class="ctrl-row"><span class="key">W A S D</span> &nbsp;Move</div>
-            <div class="ctrl-row"><span class="key">SPACE</span> Up &nbsp;·&nbsp; <span class="key">SHIFT</span> Down</div>
-            <div class="ctrl-row"><span class="key">MOUSE</span> Look / Steer</div>
-            <div class="ctrl-row"><span class="key">LMB</span> Supersonic Boost</div>
-            <div class="ctrl-row"><span class="key">C</span> Air Brakes</div>
-            <div class="ctrl-row"><span class="key">T</span> Toggle Wings / Cape</div>
-            <div class="ctrl-row"><span class="key">ALT</span> Hold to Free Look</div>
-            <div class="ctrl-row"><span class="key">ESC</span> Release Mouse Cursor</div>
-            
-            <div style="border-top:1px solid rgba(255, 255, 255, .08); margin-top:10px; padding-top:10px; display:flex; justify-content:space-between; align-items:center;">
-                <span class="hud-label" style="margin:0; font-size:.54rem">Energy Wings</span>
-                <button id="toggle-wings-btn" class="ui-toggle-btn wing">WINGS</button>
-            </div>
-            
-            <div style="margin-top:10px;font-size:.56rem;color:#6b8b9c;line-height:1.4">Click window to steer · Press <span class="key" style="font-size:.48rem;padding:0px 4px">ESC</span> to escape pointer lock</div>
+    <div id="help" class="fade">
+        <div class="hud-card">
+            <div class="hud-label">Controls</div>
+            <div class="ctrl-row"><span class="key">Mouse</span>Steer &amp; look</div>
+            <div class="ctrl-row"><span class="key">W A S D</span>Move</div>
+            <div class="ctrl-row"><span class="key">Space</span>Jump · fly up</div>
+            <div class="ctrl-row"><span class="key">Shift</span>Fly down</div>
+            <div class="ctrl-row"><span class="key">Click</span>Boost</div>
+            <div class="ctrl-row"><span class="key">C</span>Brake</div>
+            <div class="ctrl-row"><span class="key">T</span>Wings / cape</div>
+            <div class="ctrl-row"><span class="key">Alt</span>Look around (hold)</div>
+            <div class="help-foot">Fly through the golden rings · <span class="key">H</span> hides this</div>
         </div>
     </div>
+    <div id="help-hint" class="fade"><span class="key">H</span> controls</div>
+    <div id="click-prompt" class="fade">Click to fly</div>
 
-    <!-- ── Mobile controls ────────────────────────────────────── -->
+    <!-- ── Touch controls ────────────────────────────────────── -->
     <div id="mobile-controls">
-        <!-- Left: movement joystick -->
         <div id="joystick-zone"><div id="joystick-knob"></div></div>
-
-        <!-- Right: altitude cluster (top) + action row (bottom) -->
         <div id="alt-cluster">
-            <button id="up-btn"   class="alt-btn">▲</button>
+            <button id="up-btn" class="alt-btn">▲</button>
             <button id="down-btn" class="alt-btn">▼</button>
         </div>
-
         <div id="mobile-action-row">
-            <button id="gyro-btn"    class="mob-btn gyro-off">GYRO</button>
-            <button id="brake-btn"   class="mob-btn">BRAKE</button>
-            <button id="boost-btn"   class="mob-btn boost">BOOST</button>
-            <button id="wings-mob-btn" class="mob-btn">WINGS</button>
+            <button id="gyro-btn" class="mob-btn gyro-off">GYRO</button>
+            <button id="brake-btn" class="mob-btn">BRAKE</button>
+            <button id="boost-btn" class="mob-btn boost">BOOST</button>
+            <button id="wings-mob-btn" class="mob-btn wing-active">WINGS</button>
         </div>
-
-        <!-- Gyro steering indicator -->
-        <div id="gyro-indicator">GYRO STEERING</div>
     </div>
 
-    <!-- ── Entry point ────────────────────────────────────────── -->
     <script type="module" src="js/main.js"></script>
-
 </body>
 </html>

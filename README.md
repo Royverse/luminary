@@ -1,90 +1,86 @@
-# ⚡ LUMINARY — 3D Flight Engine
+# ⚡ LUMINARY
 
-> [!NOTE]
-> Welcome to **LUMINARY**, a high-octane, premium 3D browser flight experience built on top of vanilla **Three.js** and clean **ES6 modular architecture**. Fly through a dynamically generated neon metropolis, gather glowing energy rings, dodge skyscrapers, and switch between high-speed flying modes!
-
----
-
-## 🌌 The Vibe & Features
-
-Luminary is designed to look and feel extremely premium, featuring:
-*   **🚀 High-Velocity Flight Physics:** Dynamic drag coefficients, lift equations, air brakes, power dives, and supersonic boom shockwaves.
-*   **🕸️ Serverless P2P WebRTC Multiplayer:** Real-time movement synchronization via Trystero and public Nostr relays (Damus/Nos.lol). Highly resilient against firewalls with 0% server costs!
-*   **🎲 Seeded Deterministic Metropolis:** Replaces standard randomness with a Mulberry32 PRNG seeded by the WebRTC `roomID`. Both clients automatically generate the *exact same skyscraper architecture and collectible rings* locally, completely eliminating large world sync payloads!
-*   **🏁 Competitive Point-to-Point Racing:** Dash across the generated city to a towering, neon-pink sky laser Finish Beacon, guided by a 100% fair relative 3D compass HUD.
-*   **💫 Peer Visual Supersonic Sync:** connected players leave gorgeous hot-pink supersonic trails behind them when boosting, making it incredibly clean to track competitors at high altitudes.
-*   **👗 Procedural Verlet cape cloth simulation** that reacts beautifully to flight drag, velocity, and gravity.
-*   **✨ Mutually Exclusive Flight Customization:** Switch between a sweeping crimson cape or glowing cyan-magenta energy wings on the fly!
-*   **🎥 Free Look Camera System:** Hold the `ALT` key to orbit the camera fully around the hero to check out your flight from the front without steering off-course.
+A caped hero, a neon city at dusk, and golden rings to chase. Walk the plaza, jump, take off, and fly — solo or racing a friend. Built with vanilla **Three.js** and plain ES modules; no build step.
 
 ---
 
-## 🕹️ Controls (How to Fly)
+## What's in it
 
-| Command | Action |
+* **A hero who reads well from every angle** — a procedural, rigged superhero (masked face forward, hair and cape behind) with a pose system that follows what he's actually doing: running, jumping, climbing with a fist raised, prone cruising, one-fist supersonic, head-first dives.
+* **Cape or energy wings** (`T`) — the cape is a Verlet cloth simulated in the hero's own frame, so it stays stable at 1,300 km/h.
+* **Flight that feels good** — look up to climb, click to boost into supersonic, `C` to brake, hover when you let go.
+* **A calm, modern chase camera** — spring-arm follow with capped lag, collision against buildings, event-driven shake only (landings, crashes, boost), and a comfortable FOV.
+* **A real city** — a street grid with avenues, an open plaza at the spawn, and towers with properly sized floors of lit windows.
+* **Rings as fly-through chains** — the first chain leads you down the avenue from the plaza; each ring in a streak climbs a musical scale.
+* **Serverless multiplayer races** — WebRTC via Trystero over public Nostr relays. The room ID seeds the city, so everyone flies the same world.
+
+---
+
+## Controls
+
+| Input | Action |
 | :--- | :--- |
-| <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> | **Steer / Move Around** (Ground Walk / Air) |
-| <kbd>SPACE</kbd> / <kbd>SHIFT</kbd> | **Boost Altitude** / **Dive Altitude** |
-| <kbd>MOUSE</kbd> | **Camera Steering** (Steer flight vector / Look on ground) |
-| <kbd>LMB</kbd> (Left Mouse Button) | **Supersonic Boost** 🚀 (Triggers boom flash + shockwave) |
-| <kbd>C</kbd> | **Air Brakes** 🛑 (Engages high-coefficient drag) |
-| <kbd>T</kbd> | **Toggle Cape / Wings Mode** 🎛️ (Cyberpunk toggle) |
-| <kbd>ALT</kbd> (Hold) | **Unlock Free Look** 👁️ (Orbit around character while flying straight) |
+| Mouse | Steer & look (click the game to capture the mouse) |
+| <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> | Move |
+| <kbd>Space</kbd> | Jump · fly up |
+| <kbd>Shift</kbd> | Fly down |
+| Left click | Boost (supersonic; with <kbd>Shift</kbd> for a power dive) |
+| <kbd>C</kbd> | Brake |
+| <kbd>T</kbd> | Wings / cape |
+| <kbd>Alt</kbd> (hold) | Look around the hero while flying straight |
+| <kbd>H</kbd> | Show / hide controls |
+| <kbd>Esc</kbd> | Release the mouse |
+
+Touch devices get a joystick, altitude buttons, boost/brake, and optional gyro steering.
 
 ---
 
-## 📁 Scalable Directory Architecture
+## Project layout
 
 ```
-/
-├── index.html                 # Launcher bootstrap page
-├── netlify.toml               # Single-page app production config
-├── css/
-│   └── style.css              # Glassmorphic premium UI styles
-├── js/
-│   ├── main.js                # Core bootstrapper
-│   ├── GameEngine.js          # Clock, Scene, WebGLRenderer, rAF Loop
-│   ├── entities/
-│   │   ├── CharacterRig.js    # Character mesh builder & Cape Verlet solver
-│   │   └── PlayerState.js     # Single source of truth data store
-│   ├── systems/
-│   │   ├── Animation.js       # Effect manager (shockwaves, trails, dust)
-│   │   ├── AnimationPose.js   # Character skeleton dynamic pose solver
-│   │   ├── AudioManager.js    # Synths & procedural audio (Wind rumble)
-│   │   ├── InputManager.js    # Mouse, keyboard & mobile touch listeners
-│   │   ├── MultiplayerManager.js # [NEW] WebRTC state sync, nickname broadcasting & peer trail rendering
-│   │   ├── Physics.js         # Aerospace lift, drag, AABB building collision
-│   │   └── RaceManager.js        # [NEW] Checkpoint laser beacon, waypoint compass HUD & winner arbitration overlays
-│   ├── ui/
-│   │   └── UIManager.js       # HTML HUD DOM reads / writes
-│   └── world/
-│       ├── CityGenerator.js   # Procedural architectural builder
-│       ├── Collectibles.js    # Ring positions & meshes
-│       └── Environment.js     # Directional lighting & volumetric fog
-└── tests/
-    └── game.spec.js           # Automated Playwright visual QA suite
+index.html                 Page shell, import map (three, trystero), HUD markup
+css/style.css              All styling
+js/
+├── main.js                Title screen, lobby, launch
+├── GameEngine.js          Renderer, scene, frame loop, event wiring
+├── core/math.js           Shared helpers (damp, wrapAngle, seeded PRNG, noise)
+├── entities/
+│   ├── PlayerState.js     Shared state (plain data)
+│   ├── CharacterRig.js    The hero: skeleton, suit, wings
+│   └── CapeCloth.js       Cape cloth simulation
+├── systems/
+│   ├── Physics.js         Walk / jump / flight / collisions
+│   ├── AnimationPose.js   Procedural poses (local hero and peers)
+│   ├── Animation.js       Pose driver + trail, shockwave, dust, blob shadow
+│   ├── CameraController.js Spring-arm chase camera
+│   ├── InputManager.js    Keyboard, mouse, touch, gyro
+│   ├── AudioManager.js    Procedural WebAudio
+│   ├── MultiplayerManager.js  P2P rooms and remote heroes
+│   └── RaceManager.js     Multiplayer race: countdown, beacon, results
+├── ui/UIManager.js        HUD and overlays
+└── world/
+    ├── Environment.js     Sky, lights, street-level ground
+    ├── CityGenerator.js   Instanced towers on the street grid
+    └── Collectibles.js    Ring chains
 ```
+
+`AI_CONTEXT.md` has the detailed map (frame order, ownership, conventions).
 
 ---
 
-## 🚀 Running & Deploying
+## Running
 
-### Local Development
-You can run this project locally without any complex build pipeline. Just start a simple local server in the project folder:
 ```bash
-# Using standard Python server
-python -m http.server 8080
-
-# Or Node.js static server
-npx serve .
+npm start            # dev server on http://localhost:8080 (node scratch/server.js)
+npm test             # Playwright checks (local spec skips if the dev server isn't running)
 ```
 
-### Production Deployment
-Luminary is completely production-ready with continuous deployment integrated out of the box!
+Any static server works too (`npx serve .`). The page loads Three.js from jsDelivr, and Trystero from esm.run only when you host or join a race.
+
+### Deploying
+
+The site is static. With the Netlify CLI:
+
 ```bash
-# Deploy instantly to Netlify production
 netlify deploy --prod --dir=.
 ```
-
-> [!TIP]
-> Before pushing changes, run the automated Playwright sanity suite using `npx playwright test` to guarantee that your modifications haven't introduced any console errors or WebGL compiler exceptions. Stay fly! 🚀

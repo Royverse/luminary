@@ -1,329 +1,188 @@
 /**
- * js/systems/InputManager.js
- *
- * Handles all user input: keyboard, mouse (+ pointer lock), and
- * mobile joystick / touch-look / action buttons.
+ * js/systems/InputManager.js — Keyboard, mouse (pointer lock) and touch.
  *
  * @ai-context
- *   OWNS      : ALL input event listeners; state.input writes;
- *               state.mouse writes; state.pointerLocked writes.
- *   READS     : state.isStalling (gates mouse during stall).
- *   WRITES    : state.input.{forward,right,up,boost,brake};
- *               state.mouse.{x,y,dx}; state.pointerLocked.
- *   RELATED   : PlayerState.js (field definitions); index.html (mobile DOM IDs).
- *   ASK FOR   : PlayerState.js for field names; index.html if mobile button IDs change.
- *   NOTE      : attachRenderer(domElement) MUST be called by GameEngine after
- *               the canvas is appended to the DOM.
- *
- * Writes exclusively to state.input and state.mouse.
- * Reads state.isStalling to gate mouse steering during a stall.
+ *   WRITES : state.input.{forward,right,up,jump,boost,brake}; state.currentYaw/currentPitch;
+ *            state.pointerLocked; state.showWings; state.freeLook; state.showHelp.
+ *   NOTE   : attachRenderer(canvas) must be called once the canvas exists.
  */
+import { clamp } from '../core/math.js';
 
-import { clamp }    from '../main.js';
+const PITCH_LIMIT = Math.PI / 2.05;
+const MOUSE_SENS = 0.0065;
+const TOUCH_SENS = 0.007;
 
 export class InputManager {
-    /**
-     * @param {import('../entities/PlayerState.js').PlayerState} state
-     */
     constructor(state) {
         this.state = state;
-        this._prevX = 0;
-        this._prevY = 0;
-
         this._bindKeyboard();
         this._bindMouse();
-        this._bindMobile();
+        this._bindTouch();
     }
 
-    /**
-     * Called by GameEngine once the renderer canvas is in the DOM.
-     * @param {HTMLCanvasElement} domElement
-     */
-    attachRenderer(domElement) {
-        this._domElement = domElement;
-
-        domElement.addEventListener('click', () => {
-            try {
-                const p = domElement.requestPointerLock();
-                if (p) p.catch(() => {});
-            } catch (_) {}
+    attachRenderer(canvas) {
+        canvas.addEventListener('click', () => {
+            if (this.state.pointerLocked || matchMedia('(pointer: coarse)').matches) return;
+            try { canvas.requestPointerLock()?.catch?.(() => {}); } catch { /* unsupported */ }
         });
-
         document.addEventListener('pointerlockchange', () => {
             this.state.pointerLocked = !!document.pointerLockElement;
+            if (!this.state.pointerLocked) this.state.input.boost = false;
         });
+    }
+
+    _look(dx, dy, sens) {
+        const s = this.state;
+        s.currentYaw -= dx * sens;
+        s.currentPitch = clamp(s.currentPitch - dy * sens, -PITCH_LIMIT, PITCH_LIMIT);
+    }
+
+    _release() {
+        Object.assign(this.state.input, { forward: 0, right: 0, up: 0, boost: false, brake: false });
+        this.state.freeLook = false;
     }
 
     // ── Keyboard ──────────────────────────────────────────────────────
-
     _bindKeyboard() {
-        window.addEventListener('keydown', e => {
+        const inp = this.state.input;
+        const typing = e => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+        addEventListener('keydown', e => {
+            if (typing(e)) return;
             switch (e.code) {
-                case 'KeyW':     this.state.input.forward =  1;    break;
-                case 'KeyS':     this.state.input.forward = -1;    break;
-                case 'KeyA':     this.state.input.right   = -1;    break;
-                case 'KeyD':     this.state.input.right   =  1;    break;
-                case 'Space':    this.state.input.up      =  1;    break;
-                case 'ShiftLeft':this.state.input.up      = -1;    break;
-                case 'KeyC':     this.state.input.brake   = true;  break;
-                case 'KeyT':     this.state.showWings     = !this.state.showWings; break;
-                case 'AltLeft':  case 'AltRight':
-                    this.state.freeLook = true;
-                    e.preventDefault();
-                    break;
+                case 'KeyW': case 'ArrowUp':    inp.forward = 1;  break;
+                case 'KeyS': case 'ArrowDown':  inp.forward = -1; break;
+                case 'KeyA': case 'ArrowLeft':  inp.right = -1;   break;
+                case 'KeyD': case 'ArrowRight': inp.right = 1;    break;
+                case 'Space':                   inp.up = 1; if (!e.repeat) inp.jump = true; e.preventDefault(); break;
+                case 'ShiftLeft': case 'ShiftRight': inp.up = -1; break;
+                case 'KeyC':                    inp.brake = true; break;
+                case 'KeyT': if (!e.repeat) this.state.showWings = !this.state.showWings; break;
+                case 'KeyH': if (!e.repeat) this.state.showHelp = !this.state.showHelp; break;
+                case 'AltLeft': case 'AltRight': this.state.freeLook = true; e.preventDefault(); break;
             }
         });
-
-        window.addEventListener('keyup', e => {
+        addEventListener('keyup', e => {
             switch (e.code) {
-                case 'KeyW': case 'KeyS':     this.state.input.forward = 0;     break;
-                case 'KeyA': case 'KeyD':     this.state.input.right   = 0;     break;
-                case 'Space': case 'ShiftLeft':this.state.input.up     = 0;     break;
-                case 'KeyC':                  this.state.input.brake   = false; break;
-                case 'AltLeft':  case 'AltRight':
-                    this.state.freeLook = false;
-                    e.preventDefault();
-                    break;
+                case 'KeyW': case 'ArrowUp': case 'KeyS': case 'ArrowDown':      inp.forward = 0; break;
+                case 'KeyA': case 'ArrowLeft': case 'KeyD': case 'ArrowRight':   inp.right = 0;   break;
+                case 'Space': case 'ShiftLeft': case 'ShiftRight':               inp.up = 0;      break;
+                case 'KeyC':                                                     inp.brake = false; break;
+                case 'AltLeft': case 'AltRight': this.state.freeLook = false; e.preventDefault(); break;
             }
         });
+        // Keys held while the window loses focus would otherwise stay stuck
+        addEventListener('blur', () => this._release());
     }
 
     // ── Mouse ─────────────────────────────────────────────────────────
-
     _bindMouse() {
-        window.addEventListener('mousedown', e => {
-            if (e.button === 0) this.state.input.boost = true;
-        });
-        window.addEventListener('mouseup', e => {
-            if (e.button === 0) this.state.input.boost = false;
-        });
-
-        window.addEventListener('mousemove', e => {
-            const locked = this.state.pointerLocked;
-            const dx = locked ? e.movementX : (e.clientX - this._prevX);
-            const dy = locked ? e.movementY : (e.clientY - this._prevY);
-            this._prevX = e.clientX;
-            this._prevY = e.clientY;
-
-            this.state.mouse.dx = dx;
-
-            if (locked && !this.state.isStalling) {
-                const sens = 0.0065;
-                this.state.mouse.x  = (this.state.mouse.x || 0) - dx * sens;
-                this.state.mouse.y  = (this.state.mouse.y || 0) - dy * sens;
-                this.state.mouse.y  = clamp(this.state.mouse.y, -Math.PI / 2.05, Math.PI / 2.05);
-            }
-        });
+        // Boost only once the pointer is captured, so the capture click doesn't fire it
+        addEventListener('mousedown', e => { if (e.button === 0 && this.state.pointerLocked) this.state.input.boost = true; });
+        addEventListener('mouseup',   e => { if (e.button === 0) this.state.input.boost = false; });
+        addEventListener('mousemove', e => { if (this.state.pointerLocked) this._look(e.movementX, e.movementY, MOUSE_SENS); });
     }
 
-    // ── Mobile ────────────────────────────────────────────────────────
+    // ── Touch: joystick (left), swipe-look (right), buttons, optional gyro ──
+    _bindTouch() {
+        const $ = id => document.getElementById(id);
+        const s = this.state, inp = s.input;
+        const zone = $('joystick-zone'), knob = $('joystick-knob');
+        if (!zone) return;
 
-    _bindMobile() {
-        // ── Joystick (left thumb) ─────────────────────────────────────
-        const joyZone = document.getElementById('joystick-zone');
-        const joyKnob = document.getElementById('joystick-knob');
-        const JOY_R   = 65;   // outer radius  (half of 130px)
-        const JOY_DZ  = 14;   // dead-zone radius
-        let   joyId   = null; // active touch identifier
-
-        joyZone.addEventListener('touchstart', e => {
+        const JOY_R = 65, JOY_DEAD = 14;
+        let joyId = null;
+        const joyMove = t => {
+            const r = zone.getBoundingClientRect();
+            let dx = t.clientX - (r.left + r.width / 2), dy = t.clientY - (r.top + r.height / 2);
+            const d = Math.hypot(dx, dy);
+            if (d < JOY_DEAD) { dx = 0; dy = 0; }
+            else if (d > JOY_R) { dx *= JOY_R / d; dy *= JOY_R / d; }
+            knob.style.transform = `translate(${dx}px, ${dy}px)`;
+            inp.right = dx / JOY_R;
+            inp.forward = -dy / JOY_R;
+        };
+        const findTouch = (e, id) => Array.from(e.changedTouches).find(t => t.identifier === id);
+        zone.addEventListener('touchstart', e => {
             e.preventDefault();
             if (joyId !== null) return;
-            const t = e.changedTouches[0];
-            joyId = t.identifier;
-            this._updateJoy(t, joyZone, joyKnob, JOY_R, JOY_DZ);
+            joyId = e.changedTouches[0].identifier;
+            joyMove(e.changedTouches[0]);
         }, { passive: false });
-
-        joyZone.addEventListener('touchmove', e => {
+        zone.addEventListener('touchmove', e => {
             e.preventDefault();
-            const t = Array.from(e.changedTouches).find(t => t.identifier === joyId);
-            if (t) this._updateJoy(t, joyZone, joyKnob, JOY_R, JOY_DZ);
+            const t = findTouch(e, joyId);
+            if (t) joyMove(t);
         }, { passive: false });
-
         const joyEnd = e => {
-            const t = Array.from(e.changedTouches).find(t => t.identifier === joyId);
-            if (!t) return;
+            if (!findTouch(e, joyId)) return;
             joyId = null;
-            joyKnob.style.transform = '';
-            this.state.input.right   = 0;
-            this.state.input.forward = 0;
+            knob.style.transform = '';
+            inp.right = inp.forward = 0;
         };
-        joyZone.addEventListener('touchend',    joyEnd);
-        joyZone.addEventListener('touchcancel', joyEnd);
+        zone.addEventListener('touchend', joyEnd);
+        zone.addEventListener('touchcancel', joyEnd);
 
-        // ── Altitude buttons (right thumb, top cluster) ───────────────
-        const upBtn   = document.getElementById('up-btn');
-        const downBtn = document.getElementById('down-btn');
-
-        upBtn.addEventListener('touchstart',   e => { e.preventDefault(); this.state.input.up =  1; }, { passive: false });
-        upBtn.addEventListener('touchend',     e => { e.preventDefault(); this.state.input.up =  0; }, { passive: false });
-        upBtn.addEventListener('touchcancel',  e => { e.preventDefault(); this.state.input.up =  0; }, { passive: false });
-
-        downBtn.addEventListener('touchstart',  e => { e.preventDefault(); this.state.input.up = -1; }, { passive: false });
-        downBtn.addEventListener('touchend',    e => { e.preventDefault(); this.state.input.up =  0; }, { passive: false });
-        downBtn.addEventListener('touchcancel', e => { e.preventDefault(); this.state.input.up =  0; }, { passive: false });
-
-        // ── Action buttons (bottom row) ───────────────────────────────
-        const bindAction = (id, onStart, onEnd) => {
-            const el = document.getElementById(id);
+        const hold = (id, down, up) => {
+            const el = $(id);
             if (!el) return;
-            el.addEventListener('touchstart',  e => { e.preventDefault(); onStart(); }, { passive: false });
-            el.addEventListener('touchend',    e => { e.preventDefault(); onEnd();   }, { passive: false });
-            el.addEventListener('touchcancel', e => { e.preventDefault(); onEnd();   }, { passive: false });
+            el.addEventListener('touchstart', e => { e.preventDefault(); down(); }, { passive: false });
+            el.addEventListener('touchend', e => { e.preventDefault(); up(); }, { passive: false });
+            el.addEventListener('touchcancel', e => { e.preventDefault(); up(); }, { passive: false });
         };
+        hold('up-btn',    () => { inp.up = 1; inp.jump = true; }, () => { inp.up = 0; });
+        hold('down-btn',  () => { inp.up = -1; },       () => { inp.up = 0; });
+        hold('boost-btn', () => { inp.boost = true; },  () => { inp.boost = false; });
+        hold('brake-btn', () => { inp.brake = true; },  () => { inp.brake = false; });
+        hold('wings-mob-btn', () => { s.showWings = !s.showWings; }, () => {});
 
-        bindAction('boost-btn',
-            () => { this.state.input.boost = true;  },
-            () => { this.state.input.boost = false; }
-        );
-        bindAction('brake-btn',
-            () => { this.state.input.brake = true;  },
-            () => { this.state.input.brake = false; }
-        );
-
-        // Wings toggle (mobile) — keeps in sync with desktop T-key toggle
-        const wingsMobBtn    = document.getElementById('wings-mob-btn');
-        const gyroIndicator  = document.getElementById('gyro-indicator');
-
-        const syncWingsMob = () => {
-            const wings = this.state.showWings;
-            wingsMobBtn.textContent = wings ? 'WINGS' : 'CAPE';
-            wingsMobBtn.className   = 'mob-btn ' + (wings ? 'wing-active' : 'cape-active');
-        };
-        syncWingsMob();
-
-        wingsMobBtn.addEventListener('touchstart', e => {
-            e.preventDefault();
-            this.state.showWings = !this.state.showWings;
-            syncWingsMob();
-        }, { passive: false });
-
-        // ── Gyroscope steering ────────────────────────────────────────
-        this._gyroEnabled = false;
-        const gyroBtn = document.getElementById('gyro-btn');
-
-        // Calibration baseline (set when gyro activates)
-        let gyroBaseGamma = null;  // side-tilt  → yaw
-        let gyroBaseBeta  = null;  // fwd-tilt   → pitch
-        const GYRO_YAW_SENS   = 0.025;  // rad per degree
-        const GYRO_PITCH_SENS = 0.018;
-        const GYRO_CLAMP      = Math.PI / 2.05;
-
-        const onDeviceOrientation = e => {
-            if (!this._gyroEnabled || this.state.isStalling) return;
-
-            // Calibrate on first reading after activation
-            if (gyroBaseGamma === null) {
-                gyroBaseGamma = e.gamma ?? 0;
-                gyroBaseBeta  = e.beta  ?? 0;
-            }
-
-            const dGamma = (e.gamma ?? 0) - gyroBaseGamma;   // left/right tilt
-            const dBeta  = (e.beta  ?? 0) - gyroBaseBeta;    // fwd/back tilt
-
-            // Yaw: tilt phone left/right  (-gamma is natural)
-            this.state.mouse.x = -(dGamma * GYRO_YAW_SENS);
-
-            // Pitch: tilt phone fwd/back
-            this.state.mouse.y = clamp(dBeta * GYRO_PITCH_SENS, -GYRO_CLAMP, GYRO_CLAMP);
-        };
-
-        const enableGyro = async () => {
-            // iOS 13+ needs permission
-            if (typeof DeviceOrientationEvent !== 'undefined' &&
-                typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const perm = await DeviceOrientationEvent.requestPermission();
-                    if (perm !== 'granted') return false;
-                } catch { return false; }
-            }
-            window.addEventListener('deviceorientation', onDeviceOrientation, true);
-            return true;
-        };
-
-        gyroBtn.addEventListener('touchstart', async e => {
-            e.preventDefault();
-            if (!this._gyroEnabled) {
-                const ok = await enableGyro();
-                if (!ok) {
-                    gyroBtn.textContent = 'NO GYRO';
-                    return;
+        // Swipe-look on the right side of the screen
+        let lookId = null, lastX = 0, lastY = 0;
+        addEventListener('touchstart', e => {
+            for (const t of e.changedTouches) {
+                if (lookId === null && t.clientX > innerWidth * 0.45 && !e.target.closest?.('button, #joystick-zone')) {
+                    lookId = t.identifier; lastX = t.clientX; lastY = t.clientY;
                 }
-                this._gyroEnabled = true;
-                gyroBaseGamma = null; // re-calibrate on first event
-                gyroBaseBeta  = null;
-                gyroBtn.className = 'mob-btn gyro-on';
-                gyroBtn.textContent = 'GYRO ✓';
-                gyroIndicator.classList.add('visible');
-            } else {
-                this._gyroEnabled = false;
+            }
+        }, { passive: true });
+        addEventListener('touchmove', e => {
+            const t = findTouch(e, lookId);
+            if (!t || this._gyro) return;
+            this._look(t.clientX - lastX, t.clientY - lastY, TOUCH_SENS);
+            lastX = t.clientX; lastY = t.clientY;
+        }, { passive: true });
+        const lookEnd = e => { if (findTouch(e, lookId)) lookId = null; };
+        addEventListener('touchend', lookEnd);
+        addEventListener('touchcancel', lookEnd);
+
+        // Gyro steering (tilt the phone), calibrated to how it's held when enabled
+        const gyroBtn = $('gyro-btn');
+        let base = null;
+        const onTilt = e => {
+            if (!this._gyro) return;
+            if (!base) base = { g: e.gamma ?? 0, b: e.beta ?? 0 };
+            s.currentYaw = -((e.gamma ?? 0) - base.g) * 0.025;
+            s.currentPitch = clamp(((e.beta ?? 0) - base.b) * 0.018, -PITCH_LIMIT, PITCH_LIMIT);
+        };
+        gyroBtn?.addEventListener('touchstart', async e => {
+            e.preventDefault();
+            if (this._gyro) {
+                this._gyro = false;
                 gyroBtn.className = 'mob-btn gyro-off';
                 gyroBtn.textContent = 'GYRO';
-                gyroIndicator.classList.remove('visible');
-                // Reset steering to neutral so plane doesn't drift
-                this.state.mouse.x = 0;
-                this.state.mouse.y = 0;
+                return;
             }
+            try {
+                if (typeof DeviceOrientationEvent?.requestPermission === 'function' &&
+                    await DeviceOrientationEvent.requestPermission() !== 'granted') throw new Error('denied');
+            } catch {
+                gyroBtn.textContent = 'NO GYRO';
+                return;
+            }
+            addEventListener('deviceorientation', onTilt, true);
+            this._gyro = true;
+            base = null;
+            gyroBtn.className = 'mob-btn gyro-on';
+            gyroBtn.textContent = 'GYRO ✓';
         }, { passive: false });
-
-        // ── Right-side swipe look (fallback when gyro is OFF) ─────────
-        // Uses a dedicated single-touch tracker to avoid collisions
-        // with the joystick, which lives on the left half of screen.
-        let lookId      = null;
-        let lookStartX  = 0;
-        let lookStartY  = 0;
-        const LOOK_SENS = 0.007;
-
-        window.addEventListener('touchstart', e => {
-            // Only track a NEW touch that starts on the RIGHT half and
-            // is not already captured by joystick zone or action buttons
-            for (const t of e.changedTouches) {
-                if (t.clientX > window.innerWidth * 0.45 && lookId === null &&
-                    !joyZone.contains(e.target) ) {
-                    lookId     = t.identifier;
-                    lookStartX = t.clientX;
-                    lookStartY = t.clientY;
-                }
-            }
-        }, { passive: true });
-
-        window.addEventListener('touchmove', e => {
-            if (this._gyroEnabled) return; // gyro takes priority
-            const t = Array.from(e.changedTouches).find(t => t.identifier === lookId);
-            if (!t || this.state.isStalling) return;
-
-            const dx = t.clientX - lookStartX;
-            const dy = t.clientY - lookStartY;
-            lookStartX = t.clientX;
-            lookStartY = t.clientY;
-
-            this.state.mouse.x  = (this.state.mouse.x  || 0) - dx * LOOK_SENS;
-            this.state.mouse.y  = clamp(
-                (this.state.mouse.y || 0) - dy * LOOK_SENS,
-                -Math.PI / 2.05,
-                 Math.PI / 2.05
-            );
-            this.state.mouse.dx = dx;
-        }, { passive: true });
-
-        window.addEventListener('touchend',    e => { for (const t of e.changedTouches) if (t.identifier === lookId) lookId = null; });
-        window.addEventListener('touchcancel', e => { for (const t of e.changedTouches) if (t.identifier === lookId) lookId = null; });
-    }
-
-    // ── Joystick position helper ──────────────────────────────────────
-    _updateJoy(touch, zone, knob, maxR, dz) {
-        const rect = zone.getBoundingClientRect();
-        const cx = rect.left + rect.width  / 2;
-        const cy = rect.top  + rect.height / 2;
-        let   dx = touch.clientX - cx;
-        let   dy = touch.clientY - cy;
-        const d  = Math.sqrt(dx * dx + dy * dy);
-
-        if (d < dz) { dx = 0; dy = 0; }
-        else if (d > maxR) { dx = dx / d * maxR; dy = dy / d * maxR; }
-
-        knob.style.transform = `translate(${dx}px, ${dy}px)`;
-        this.state.input.right   =  dx / maxR;
-        this.state.input.forward = -dy / maxR;
     }
 }
